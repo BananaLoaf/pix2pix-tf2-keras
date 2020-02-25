@@ -1,0 +1,14 @@
+
+.idea/
+
+__pycache__/
+
+result/
+
+.venv
+
+*.png
+
+*.jpg
+
+*.jpeg

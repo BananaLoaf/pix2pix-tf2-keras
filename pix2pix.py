@@ -39,9 +39,12 @@ EPOCHS = "EPOCHS"
 
 class Pix2Pix:
     config: dict
-    run_directory: Path
     dataloader: DataLoader
     writer: tf.summary.SummaryWriter
+
+    run_path: Path
+    samples_path: Path
+    model_path: Path
 
     D_net: tf.keras.models.Model
     D_optimizer: tf.keras.optimizers.Adam
@@ -56,8 +59,8 @@ class Pix2Pix:
     def __init__(self, config: dict, run_directory: Path):
         self.config = config
 
-        self.run_directory = run_directory
-        self.run_directory.mkdir()
+        self.run_path = run_directory
+        self.run_path.mkdir()
 
         self._init_fields()
 
@@ -66,12 +69,20 @@ class Pix2Pix:
         self.G_net.summary()
 
         if plot:
-            tf.keras.utils.plot_model(self.D_net, to_file=f"{self.run_directory}/D_net.png", show_shapes=True, dpi=64)
-            tf.keras.utils.plot_model(self.G_net, to_file=f"{self.run_directory}/G_net.png", show_shapes=True, dpi=64)
+            tf.keras.utils.plot_model(self.D_net, to_file=f"{self.run_path}/D_net.png", show_shapes=True, dpi=64)
+            tf.keras.utils.plot_model(self.G_net, to_file=f"{self.run_path}/G_net.png", show_shapes=True, dpi=64)
 
     def _restore(self):
         self.D_ckpt.restore(self.D_ckpt_manager.latest_checkpoint)
         self.G_ckpt.restore(self.G_ckpt_manager.latest_checkpoint)
+
+    def _snap(self, epoch: int):
+        self.D_ckpt_manager.save(epoch)
+        self.G_ckpt_manager.save(epoch)
+
+    def _save(self):
+        self.D_net.save(str(self.model_path.joinpath("D")), save_format="tf")
+        self.G_net.save(str(self.model_path.joinpath("G")), save_format="tf")
 
     @classmethod
     def new_run(cls, config: dict):
@@ -102,7 +113,19 @@ class Pix2Pix:
                                            batch_size=self.config[BATCH_SIZE],
                                            resolution=self.config[RESOLUTION],
                                            channels=self.config[IN_CHANNELS])
-        self.writer = tf.summary.create_file_writer(str(self.run_directory))
+        self.writer = tf.summary.create_file_writer(str(self.run_path))
+
+        ################################################################
+        self.samples_path = Path(f"{self.run_path}/samples")
+        self.samples_path.mkdir(exist_ok=True)
+
+        self.checkpoints_path = Path(f"{self.run_path}/checkpoints")
+        self.checkpoints_path.joinpath("D").mkdir(exist_ok=True, parents=True)
+        self.checkpoints_path.joinpath("G").mkdir(exist_ok=True, parents=True)
+
+        self.model_path = Path(f"{self.run_path}/model")
+        self.model_path.joinpath("D").mkdir(exist_ok=True, parents=True)
+        self.model_path.joinpath("G").mkdir(exist_ok=True, parents=True)
 
         ################################################################
         self.D_net = Discriminator(input_resolution=self.config[RESOLUTION],
@@ -111,7 +134,7 @@ class Pix2Pix:
 
         self.D_optimizer = tf.keras.optimizers.Adam(learning_rate=self.config[LEARNING_RATE], beta_1=self.config[BETA1])
         self.D_ckpt = tf.train.Checkpoint(optimizer=self.D_optimizer, model=self.D_net)
-        self.D_ckpt_manager = tf.train.CheckpointManager(self.D_ckpt, directory=f"{self.run_directory}/checkpoints/D",
+        self.D_ckpt_manager = tf.train.CheckpointManager(self.D_ckpt, directory=str(self.checkpoints_path.joinpath("D")),
                                                          max_to_keep=self.config[EPOCHS], checkpoint_name="D")
 
         ################################################################
@@ -122,7 +145,7 @@ class Pix2Pix:
 
         self.G_optimizer = tf.keras.optimizers.Adam(learning_rate=self.config[LEARNING_RATE], beta_1=self.config[BETA1])
         self.G_ckpt = tf.train.Checkpoint(optimizer=self.G_optimizer, model=self.G_net)
-        self.G_ckpt_manager = tf.train.CheckpointManager(self.G_ckpt, directory=f"{self.run_directory}/checkpoints/G",
+        self.G_ckpt_manager = tf.train.CheckpointManager(self.G_ckpt, directory=str(self.checkpoints_path.joinpath("G")),
                                                          max_to_keep=self.config[EPOCHS], checkpoint_name="G")
 
     def train(self):
@@ -179,28 +202,25 @@ class Pix2Pix:
             ################################################################
             # Save sample images
             if epoch % 1 == 0:
-                img = self.sample_images(6)
-                img_path = Path(f"{self.run_directory}/samples/{str(self.config[STEP]).zfill(10)}.png")
-                img_path.parent.mkdir(exist_ok=True)
-                cv2.imwrite(str(img_path), cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
+                self.generate_sample(6)
+
+            # Checkpoint
+            if epoch % 10 == 0:
+                print("Saving checkpoint")
+                self._snap(epoch)
 
             ################################################################
             # Epoch ended
             pbar.close()
 
-            self.D_ckpt_manager.save(epoch)
-            self.G_ckpt_manager.save(epoch)
-
             self.config[EPOCH] = epoch + 1
-            with self.run_directory.joinpath("config.json").open("w") as file:
+            with self.run_path.joinpath("config.json").open("w") as file:
                 json.dump(self.config, file, indent=4)
 
-        self.D_net.save(f"{self.run_directory}/model/D", save_format="tf")
-        self.G_net.save(f"{self.run_directory}/model/G", save_format="tf")
+        self._save()
 
-    def sample_images(self, n: int):
+    def generate_sample(self, n: int):
         real_As, real_Bs = self.dataloader.get_images(n)
-
         fake_As = self.G_net.predict(real_Bs)
 
         rgb_img = np.hstack([real_Bs[0], real_As[0], fake_As[0]])
@@ -209,6 +229,7 @@ class Pix2Pix:
                 rgb_img,
                 np.hstack([real_Bs[row], real_As[row], fake_As[row]])
             ])
+        rgb_img = ((rgb_img + 1) * 127.5).astype(np.uint8)
 
-        rgb_img = (rgb_img + 1) * 127.5
-        return rgb_img.astype(np.uint8)
+        img_path = self.samples_path.joinpath(f"{str(self.config[STEP]).zfill(10)}.png")
+        cv2.imwrite(str(img_path), cv2.cvtColor(rgb_img, cv2.COLOR_RGB2BGR))

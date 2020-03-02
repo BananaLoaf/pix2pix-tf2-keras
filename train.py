@@ -35,6 +35,8 @@ if __name__ == '__main__':
     parser.add_argument("-e", "--epochs", type=int, default=1_000, help="Epochs (default: %(default)s)",
                         dest=EPOCHS)
     # Training options
+    parser.add_argument("-sn", "--sample-n", type=int, default=6, help="Amount of samples (default: %(default)s)",
+                        dest=SAMPLE_N)
     parser.add_argument("-sf", "--sample-freq", type=int, default=100, help="Sampling frequency in steps (default: %(default)s)",
                         dest=SAMPLE_FREQ)
     parser.add_argument("-cf", "--checkpoint-freq", type=int, default=10, help="Checkpoint frequency in epochs (default: %(default)s)",

@@ -40,6 +40,7 @@ STEP = "STEP"
 EPOCH = "EPOCH"
 EPOCHS = "EPOCHS"
 
+SAMPLE_N = "SAMPLE_N"
 SAMPLE_FREQ = "SAMPLE_FREQ"
 CHECKPOINT_FREQ = "CHECKPOINT_FREQ"
 
@@ -63,6 +64,7 @@ CONFIG_SCHEMA = {
         BATCH_SIZE,
         EPOCHS,
 
+        SAMPLE_N,
         SAMPLE_FREQ,
         CHECKPOINT_FREQ,
     ],
@@ -85,6 +87,7 @@ CONFIG_SCHEMA = {
         EPOCH: {"type": int, "default": 0},
         EPOCHS: {"type": int},
 
+        SAMPLE_N: {"type": int},
         SAMPLE_FREQ: {"type": int},
         CHECKPOINT_FREQ: {"type": int}
     }

@@ -28,13 +28,11 @@ class TFRecordDataLoader(DataLoader):
 
         return img_A, img_B
 
-    def get_images(self, n: int) -> Tuple[np.ndarray, ...]:
-        shuffled_tfrecord = self.tfrecord.shuffle(buffer_size=int(self.tfrecord_len / 10))
-
+    def get_records(self, n: int) -> Tuple[np.ndarray, ...]:
         img_As = np.zeros((n, self.resolution, self.resolution, self.channels))
         img_Bs = np.zeros((n, self.resolution, self.resolution, self.channels))
 
-        for i, record in enumerate(shuffled_tfrecord.take(n)):
+        for i, record in enumerate(self.tfrecord.shuffle(buffer_size=int(self.tfrecord_len / 10)).take(n)):
             img_A, img_B = self._get_pair(record)
 
             img_As[i] = img_A

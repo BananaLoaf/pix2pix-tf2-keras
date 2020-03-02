@@ -27,7 +27,7 @@ class FacadesDataLoader(DataLoader):
     def _get_pair(self, img_path) -> Tuple[np.ndarray, ...]:
         return self.imread(img_path.with_suffix(".jpg")), self.imread(img_path.with_suffix(".png"))
 
-    def get_images(self, n: int) -> Tuple[np.ndarray, ...]:
+    def get_records(self, n: int) -> Tuple[np.ndarray, ...]:
         img_As = np.zeros((n, self.resolution, self.resolution, self.channels))
         img_Bs = np.zeros((n, self.resolution, self.resolution, self.channels))
 

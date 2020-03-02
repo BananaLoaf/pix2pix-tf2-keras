@@ -9,14 +9,14 @@ import numpy as np
 
 OUTPUT = "OUTPUT"
 RES = "RES"
-BnW_A = "BnW_A"
-BnW_B = "BnW_B"
+GS_A = "GS_A"
+GS_B = "GS_B"
 PATH_A = "PATH_A"
 PATH_B = "PATH_B"
 
 
-def imread(path: Path, bnw: bool, resolution: int) -> np.ndarray:
-    mode = cv2.IMREAD_GRAYSCALE if bnw else cv2.IMREAD_COLOR
+def imread(path: Path, gs: bool, resolution: int) -> np.ndarray:
+    mode = cv2.IMREAD_GRAYSCALE if gs else cv2.IMREAD_COLOR
     img = cv2.imread(str(path), mode)
     img = cv2.resize(img, (resolution, resolution))
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -29,10 +29,10 @@ if __name__ == '__main__':
                         dest=OUTPUT)
     parser.add_argument("-r", "--res", type=int, default=256, help="Image resolution (default: %(default)s)",
                         dest=RES)
-    parser.add_argument("--A-bnw", action="store_true", default=False, help="A is black and write (default: %(default)s)",
-                        dest=BnW_A)
-    parser.add_argument("--B-bnw", action="store_true", default=False, help="B is black and write (default: %(default)s)",
-                        dest=BnW_B)
+    parser.add_argument("--A-gs", action="store_true", default=False, help="A is grayscale (default: %(default)s)",
+                        dest=GS_A)
+    parser.add_argument("--B-gs", action="store_true", default=False, help="B is grayscale (default: %(default)s)",
+                        dest=GS_B)
     parser.add_argument(PATH_A, type=str, help="Path to A")
     parser.add_argument(PATH_B, type=str, help="Path to B")
     args = vars(parser.parse_args())
@@ -47,14 +47,16 @@ if __name__ == '__main__':
             filename_B = next(path_B.glob(f"{filename_A.stem}.*"))
             print(f"A: {filename_A}, B: {filename_B}")
 
-            img_A = imread(path=filename_A, bnw=args[BnW_A], resolution=args[RES])
-            img_B = imread(path=filename_B, bnw=args[BnW_B], resolution=args[RES])
+            img_A = imread(path=filename_A, gs=args[GS_A], resolution=args[RES])
+            img_B = imread(path=filename_B, gs=args[GS_B], resolution=args[RES])
 
-            A_list = tf.train.BytesList(value=[pickle.dumps(img_A)])
-            B_list = tf.train.BytesList(value=[pickle.dumps(img_B)])
             pair_dict = {
-                "A": tf.train.Feature(bytes_list=A_list),
-                "B": tf.train.Feature(bytes_list=B_list),
+                "A": tf.train.Feature(bytes_list=
+                                      tf.train.BytesList(value=[pickle.dumps(img_A)])
+                                      ),
+                "B": tf.train.Feature(bytes_list=
+                                      tf.train.BytesList(value=[pickle.dumps(img_B)])
+                                      ),
             }
             pair = tf.train.Features(feature=pair_dict)
 

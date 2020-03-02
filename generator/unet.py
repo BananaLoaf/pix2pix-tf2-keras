@@ -1,6 +1,7 @@
 from typing import List
 
 import tensorflow as tf
+import numpy as np
 
 
 class UNet(tf.keras.models.Model):
@@ -70,6 +71,20 @@ class UNet(tf.keras.models.Model):
         x = tf.keras.layers.Concatenate()([x, skip_input])
 
         return x
+
+    def generate_samples(self, real_As: tf.Tensor, real_Bs: tf.Tensor, n: int):
+        """Must return RGB image if possible, else None"""
+        fake_As = self.predict(real_Bs)
+
+        rgb_img = np.hstack([real_Bs[0], real_As[0], fake_As[0]])
+        for row in range(1, n):
+            rgb_img = np.vstack([
+                rgb_img,
+                np.hstack([real_Bs[row], real_As[row], fake_As[row]])
+            ])
+        rgb_img = ((rgb_img + 1) * 127.5).astype(np.uint8)
+
+        return rgb_img
 
 
 class UNet64(UNet):

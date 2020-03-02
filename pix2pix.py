@@ -142,7 +142,13 @@ class Pix2Pix:
                 ################################################################
                 # Save sample images
                 if self.config[STEP] % self.config[SAMPLE_FREQ] == 0:
-                    self.generate_sample(6)
+                    rgb_img = self.G_net.generate_samples(
+                        *self.dataloader.get_records(self.config[SAMPLE_N]),
+                        n=self.config[SAMPLE_N]
+                    )
+                    if rgb_img is not None:
+                        img_path = self.samples_path.joinpath(f"{str(self.config[STEP]).zfill(10)}.png")
+                        cv2.imwrite(str(img_path), cv2.cvtColor(rgb_img, cv2.COLOR_RGB2BGR))
 
                 ################################################################
                 #  Train Discriminator
@@ -197,18 +203,3 @@ class Pix2Pix:
                 self._save_config()
 
         self._save_models()
-
-    def generate_sample(self, n: int):
-        real_As, real_Bs = self.dataloader.get_images(n)
-        fake_As = self.G_net.predict(real_Bs)
-
-        rgb_img = np.hstack([real_Bs[0], real_As[0], fake_As[0]])
-        for row in range(1, n):
-            rgb_img = np.vstack([
-                rgb_img,
-                np.hstack([real_Bs[row], real_As[row], fake_As[row]])
-            ])
-        rgb_img = ((rgb_img + 1) * 127.5).astype(np.uint8)
-
-        img_path = self.samples_path.joinpath(f"{str(self.config[STEP]).zfill(10)}.png")
-        cv2.imwrite(str(img_path), cv2.cvtColor(rgb_img, cv2.COLOR_RGB2BGR))

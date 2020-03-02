@@ -17,7 +17,7 @@ class DataLoader:
         raise NotImplementedError
         return 0
 
-    def get_images(self, n: int) -> Tuple[np.ndarray, ...]:
+    def get_records(self, n: int) -> Tuple[np.ndarray, ...]:
         raise NotImplementedError
 
         # Example

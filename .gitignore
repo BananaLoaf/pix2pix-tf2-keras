@@ -12,3 +12,4 @@ result/
 *.jpg
 
 *.jpeg
+*.tfrecord

@@ -29,5 +29,5 @@ class DataLoader:
 
         # Example
         for i in range(self.batches):
-            img_As = img_Bs = np.random.rand((1, 512, 512, 3))  # (batch_size, resolution, resolution, channels)
+            img_As = img_Bs = np.random.rand((self.batch_size, 512, 512, 3))  # (batch_size, resolution, resolution, channels)
             yield img_As, img_Bs

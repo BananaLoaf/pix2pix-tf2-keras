@@ -1,13 +1,13 @@
-from dataloader.template import DataLoader
-
 from typing import Tuple
 
 from pathlib import Path
 import numpy as np
 import cv2
 
+from dataloader.template import DataLoader
 
-class Facades(DataLoader):
+
+class FacadesDataLoader(DataLoader):
     def __init__(self, dataset: Path, batch_size: int, resolution: int, channels: int):
         super().__init__(dataset, batch_size, resolution, channels)
 

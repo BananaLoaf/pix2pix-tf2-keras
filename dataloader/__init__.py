@@ -1,8 +1,8 @@
-from dataloader.facades import Facades
+from dataloader.facades import FacadesDataLoader
 from dataloader.tfrecord import TFRecordDataLoader
 
 
 DATALOADERS = {
-    Facades.__name__: Facades
+    FacadesDataLoader.__name__: FacadesDataLoader,
     TFRecordDataLoader.__name__: TFRecordDataLoader
 }

@@ -72,9 +72,10 @@ class UNet(tf.keras.models.Model):
 
         return x
 
-    def generate_samples(self, real_As: tf.Tensor, real_Bs: tf.Tensor, n: int):
+    def generate_samples(self, real_As: tf.Tensor, real_Bs: tf.Tensor):
         """Must return RGB image if possible, else None"""
-        fake_As = self.predict(real_Bs)
+        n = real_As.shape[0]
+        fake_As = self(real_Bs).numpy()
 
         rgb_img = np.hstack([real_Bs[0], real_As[0], fake_As[0]])
         for row in range(1, n):

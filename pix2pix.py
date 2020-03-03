@@ -16,9 +16,6 @@ from dataloader.template import DataLoader
 from discriminator import Discriminator
 
 
-tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
-
-
 class Pix2Pix:
     config: Config
     dataloader: DataLoader
@@ -40,6 +37,10 @@ class Pix2Pix:
     G_ckpt_manager: tf.train.CheckpointManager
 
     def __init__(self, config: Config, run_directory: Path):
+        tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+        # XLA, https://www.tensorflow.org/xla
+        os.environ["TF_XLA_FLAGS"] = "--tf_xla_auto_jit=2 --tf_xla_cpu_global_jit"
+
         self.config = config
 
         self.run_path = run_directory
@@ -49,10 +50,25 @@ class Pix2Pix:
         self._init_fields()
         self._init_networks()
 
-    # Decorator
     def strategy_scope(func):
+        """Run function in a strategy context"""
         def wrapper(self, *args, **kwargs):
             self.strategy.experimental_run_v2(lambda: func(self, *args, **kwargs))
+
+        return wrapper
+
+    def descope(func):
+        """Descope function within other context"""
+        def wrapper(*args, **kwargs):
+            def descoper(strategy: Optional[tf.distribute.Strategy] = None, *args, **kwargs):
+                if strategy is None:
+                    func(*args, **kwargs)
+                else:
+                    with strategy.scope():
+                        func(*args, **kwargs)
+
+            tf.distribute.get_replica_context().merge_call(lambda strategy: descoper(strategy, *args, **kwargs))
+
         return wrapper
 
     def _init_strategy(self):
@@ -196,7 +212,7 @@ class Pix2Pix:
             # Checkpoint
             if epoch % self.config[CHECKPOINT_FREQ] == 0:
                 print("Saving checkpoint")
-                tf.distribute.get_replica_context().merge_all(lambda strategy: self._snap(epoch, strategy=strategy))
+                self._snap(epoch)
                 self._save_config()
 
         print("Saving models")
@@ -211,15 +227,10 @@ class Pix2Pix:
             tf.keras.utils.plot_model(self.D_net, to_file=f"{self.run_path}/D_net.png", show_shapes=True, dpi=64)
             tf.keras.utils.plot_model(self.G_net, to_file=f"{self.run_path}/G_net.png", show_shapes=True, dpi=64)
 
-    def _snap(self, epoch: int, strategy: Optional[tf.distribute.Strategy] = None):
-        if strategy is None:
-            self.D_ckpt_manager.save(epoch)
-            self.G_ckpt_manager.save(epoch)
-
-        else:
-            with strategy.scope():
-                self.D_ckpt_manager.save(epoch)
-                self.G_ckpt_manager.save(epoch)
+    @descope
+    def _snap(self, epoch: int):
+        self.D_ckpt_manager.save(epoch)
+        self.G_ckpt_manager.save(epoch)
 
     def _save_models(self):
         self.D_net.save(str(self.model_path.joinpath("D")), save_format="tf")

@@ -32,6 +32,9 @@ GENERATOR = "GENERATOR"
 DATALOADER = "DATALOADER"
 DATASET = "DATASET"
 
+DEVICE = "DEVICE"
+XLA = "XLA"
+
 LEARNING_RATE = "LEARNING_RATE"
 BETA1 = "BETA1"
 G_L1_LAMBDA = "G_L1_LAMBDA"
@@ -58,6 +61,9 @@ CONFIG_SCHEMA = {
         DATALOADER,
         DATASET,
 
+        DEVICE,
+        XLA,
+
         LEARNING_RATE,
         BETA1,
         G_L1_LAMBDA,
@@ -78,6 +84,9 @@ CONFIG_SCHEMA = {
         GENERATOR: {"type": str},
         DATALOADER: {"type": str},
         DATASET: {"type": str},
+
+        DEVICE: {"type": str},
+        XLA: {"type": bool},
 
         LEARNING_RATE: {"type": float},
         BETA1: {"type": float},

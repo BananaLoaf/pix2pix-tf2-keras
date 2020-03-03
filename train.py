@@ -1,8 +1,14 @@
 from argparse import ArgumentParser
 
+import tensorflow as tf
+
 from config import *
 from generator import *
 from dataloader import *
+
+
+ALL_DEVICES = [dev.name.replace("device:", "").lower() for dev in tf.config.list_logical_devices()]
+
 
 if __name__ == '__main__':
     parser = ArgumentParser(description="Pix2Pix tensorflow 2 keras implementation")
@@ -23,6 +29,16 @@ if __name__ == '__main__':
                         dest=DATALOADER)
     parser.add_argument("--dataset", type=str, required=True, help="Path to dataset",
                         dest=DATASET)
+    # Device
+    device_group = parser.add_mutually_exclusive_group(required=False)
+    device_group.add_argument("--cpu", type=str, default="/cpu:0", choices=list(filter(lambda dev: dev.startswith("/cpu"), ALL_DEVICES)), help="Single CPU (default: %(default)s)",
+                              dest=DEVICE)
+    device_group.add_argument("--gpu", type=str, help=f"Available GPUs: {list(filter(lambda dev: dev.startswith('/gpu'), ALL_DEVICES))}, list devices with ; delimiter",
+                              dest=DEVICE)
+    device_group.add_argument("--tpu", type=str, help=f"TPU name",
+                              dest=DEVICE)
+    parser.add_argument("--XLA", action="store_true", default=False, help="XLA, https://www.tensorflow.org/xla (default: %(default)s)",
+                        dest=XLA)
     # Training params
     parser.add_argument("--lr", type=float, default=0.0002, help="Adam Learning rate (default: %(default)s)",
                         dest=LEARNING_RATE)

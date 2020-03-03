@@ -81,7 +81,8 @@ class Pix2Pix:
         Generator_class = GENERATORS[self.config[GENERATOR]]
         self.G_net = Generator_class(resolution=self.config[RESOLUTION],
                                      input_channels=self.config[IN_CHANNELS],
-                                     output_channels=self.config[OUT_CHANNELS])
+                                     output_channels=self.config[OUT_CHANNELS],
+                                     filters=self.config[FILTERS])
 
         self.G_optimizer = tf.keras.optimizers.Adam(learning_rate=self.config[LEARNING_RATE], beta_1=self.config[BETA1])
         self.G_ckpt = tf.train.Checkpoint(optimizer=self.G_optimizer, model=self.G_net)

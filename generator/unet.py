@@ -88,7 +88,7 @@ class UNet(tf.keras.models.Model):
 
 
 class UNet32(UNet):
-    def __init__(self, resolution: int, input_channels: int, output_channels: int, filters: int = 64):
+    def __init__(self, resolution: int, input_channels: int, output_channels: int, filters: int):
         super().__init__(resolution=resolution,
                          input_channels=input_channels,
                          output_channels=output_channels,
@@ -96,7 +96,7 @@ class UNet32(UNet):
 
 
 class UNet64(UNet):
-    def __init__(self, resolution: int, input_channels: int, output_channels: int, filters: int = 64):
+    def __init__(self, resolution: int, input_channels: int, output_channels: int, filters: int):
         super().__init__(resolution=resolution,
                          input_channels=input_channels,
                          output_channels=output_channels,
@@ -104,7 +104,7 @@ class UNet64(UNet):
 
 
 class UNet128(UNet):
-    def __init__(self, resolution: int, input_channels: int, output_channels: int, filters: int = 64):
+    def __init__(self, resolution: int, input_channels: int, output_channels: int, filters: int):
         super().__init__(resolution=resolution,
                          input_channels=input_channels,
                          output_channels=output_channels,
@@ -112,7 +112,7 @@ class UNet128(UNet):
 
 
 class UNet256(UNet):
-    def __init__(self, resolution: int, input_channels: int, output_channels: int, filters: int = 64):
+    def __init__(self, resolution: int, input_channels: int, output_channels: int, filters: int):
         super().__init__(resolution=resolution,
                          input_channels=input_channels,
                          output_channels=output_channels,
@@ -120,7 +120,7 @@ class UNet256(UNet):
 
 
 class UNet512(UNet):
-    def __init__(self, resolution: int, input_channels: int, output_channels: int, filters: int = 64):
+    def __init__(self, resolution: int, input_channels: int, output_channels: int, filters: int):
         super().__init__(resolution=resolution,
                          input_channels=input_channels,
                          output_channels=output_channels,
@@ -128,7 +128,7 @@ class UNet512(UNet):
 
 
 class UNet1024(UNet):
-    def __init__(self, resolution: int, input_channels: int, output_channels: int, filters: int = 64):
+    def __init__(self, resolution: int, input_channels: int, output_channels: int, filters: int):
         super().__init__(resolution=resolution,
                          input_channels=input_channels,
                          output_channels=output_channels,

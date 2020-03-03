@@ -37,6 +37,8 @@ if __name__ == '__main__':
                               dest=DEVICE)
     device_group.add_argument("--tpu", type=str, help=f"TPU name",
                               dest=DEVICE)
+    parser.add_argument("--XLA", action="store_true", default=False, help="XLA, https://www.tensorflow.org/xla (default: %(default)s)",
+                        dest=XLA)
     # Training params
     parser.add_argument("--lr", type=float, default=0.0002, help="Adam Learning rate (default: %(default)s)",
                         dest=LEARNING_RATE)

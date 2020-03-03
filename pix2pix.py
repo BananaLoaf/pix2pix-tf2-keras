@@ -38,10 +38,10 @@ class Pix2Pix:
 
     def __init__(self, config: Config, run_directory: Path):
         tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
-        # XLA, https://www.tensorflow.org/xla
-        os.environ["TF_XLA_FLAGS"] = "--tf_xla_auto_jit=2 --tf_xla_cpu_global_jit"
-
         self.config = config
+
+        if self.config[XLA]:
+            os.environ["TF_XLA_FLAGS"] = "--tf_xla_auto_jit=2 --tf_xla_cpu_global_jit"
 
         self.run_path = run_directory
         self.run_path.mkdir(exist_ok=True, parents=True)

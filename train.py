@@ -1,11 +1,13 @@
 from argparse import ArgumentParser
 
+import tensorflow as tf
+
 from config import *
 from generator import *
 from dataloader import *
 
 
-ALL_DEVICES = [dev.name.replace("device:", "") for dev in tf.config.list_logical_devices()]
+ALL_DEVICES = [dev.name.replace("device:", "").lower() for dev in tf.config.list_logical_devices()]
 
 
 if __name__ == '__main__':
@@ -29,9 +31,9 @@ if __name__ == '__main__':
                         dest=DATASET)
     # Device
     device_group = parser.add_mutually_exclusive_group(required=False)
-    device_group.add_argument("--cpu", type=str, default="/cpu:0", choices=list(filter(lambda dev: "/cpu" in dev, ALL_DEVICES)), help="Single CPU (default: %(default)s)",
+    device_group.add_argument("--cpu", type=str, default="/cpu:0", choices=list(filter(lambda dev: dev.startswith("/cpu"), ALL_DEVICES)), help="Single CPU (default: %(default)s)",
                               dest=DEVICE)
-    device_group.add_argument("--gpu", type=str, help=f"Available GPUs: {list(filter(lambda dev: '/gpu' in dev, ALL_DEVICES))}, list devices with ; delimiter",
+    device_group.add_argument("--gpu", type=str, help=f"Available GPUs: {list(filter(lambda dev: dev.startswith('/gpu'), ALL_DEVICES))}, list devices with ; delimiter",
                               dest=DEVICE)
     parser.add_argument("--tpu", action="store_true", default=False, help=f"Experimental utilization of Google Cloud TPUs. If supplied, --cpu and --gpu arguments are ignored",
                         dest=USE_TPU)

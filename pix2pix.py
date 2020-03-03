@@ -218,4 +218,5 @@ class Pix2Pix:
                 self._snap(epoch)
                 self._save_config()
 
+        print("Saving models")
         self._save_models()

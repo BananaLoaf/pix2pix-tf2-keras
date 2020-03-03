@@ -28,7 +28,7 @@ class TFRecordDataLoader(DataLoader):
 
         return img_A, img_B
 
-    def get_records(self, n: int) -> Tuple[np.ndarray, ...]:
+    def get_records(self, n: int) -> Tuple[tf.Tensor, ...]:
         img_As = np.zeros((n, self.resolution, self.resolution, self.channels))
         img_Bs = np.zeros((n, self.resolution, self.resolution, self.channels))
 
@@ -38,9 +38,9 @@ class TFRecordDataLoader(DataLoader):
             img_As[i] = img_A
             img_Bs[i] = img_B
 
-        return img_As, img_Bs
+        return tf.convert_to_tensor(img_As), tf.convert_to_tensor(img_Bs)
 
-    def yield_batch(self) -> Tuple[np.ndarray, ...]:
+    def yield_batch(self) -> Tuple[tf.Tensor, ...]:
         img_As = np.zeros((self.batch_size, self.resolution, self.resolution, self.channels))
         img_Bs = np.zeros((self.batch_size, self.resolution, self.resolution, self.channels))
 
@@ -51,4 +51,4 @@ class TFRecordDataLoader(DataLoader):
                 img_As[j] = img_A
                 img_Bs[j] = img_B
 
-            yield img_As, img_Bs
+            yield tf.convert_to_tensor(img_As), tf.convert_to_tensor(img_Bs)

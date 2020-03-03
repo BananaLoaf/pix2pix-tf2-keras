@@ -35,8 +35,8 @@ if __name__ == '__main__':
                               dest=DEVICE)
     device_group.add_argument("--gpu", type=str, help=f"Available GPUs: {list(filter(lambda dev: dev.startswith('/gpu'), ALL_DEVICES))}, list devices with ; delimiter",
                               dest=DEVICE)
-    parser.add_argument("--tpu", action="store_true", default=False, help=f"Experimental utilization of Google Cloud TPUs. If supplied, --cpu and --gpu arguments are ignored",
-                        dest=USE_TPU)
+    device_group.add_argument("--tpu", type=str, help=f"TPU name",
+                              dest=DEVICE)
     # Training params
     parser.add_argument("--lr", type=float, default=0.0002, help="Adam Learning rate (default: %(default)s)",
                         dest=LEARNING_RATE)

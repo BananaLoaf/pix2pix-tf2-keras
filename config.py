@@ -33,7 +33,6 @@ DATALOADER = "DATALOADER"
 DATASET = "DATASET"
 
 DEVICE = "DEVICE"
-USE_TPU = "USE_TPU"
 
 LEARNING_RATE = "LEARNING_RATE"
 BETA1 = "BETA1"
@@ -62,7 +61,6 @@ CONFIG_SCHEMA = {
         DATASET,
 
         DEVICE,
-        USE_TPU,
 
         LEARNING_RATE,
         BETA1,
@@ -86,7 +84,6 @@ CONFIG_SCHEMA = {
         DATASET: {"type": str},
 
         DEVICE: {"type": str},
-        USE_TPU: {"type": bool},
 
         LEARNING_RATE: {"type": float},
         BETA1: {"type": float},

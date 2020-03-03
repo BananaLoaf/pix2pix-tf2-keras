@@ -56,16 +56,15 @@ class Pix2Pix:
         return wrapper
 
     def _init_strategy(self):
-        if self.config[USE_TPU]:
-            cluster_resolver = tf.distribute.cluster_resolver.TPUClusterResolver()
-            tf.config.experimental_connect_to_cluster(cluster_resolver)
-            tf.tpu.experimental.initialize_tpu_system(cluster_resolver)
-            self.strategy = tf.distribute.experimental.TPUStrategy(cluster_resolver)
-
-        elif "cpu" in self.config[DEVICE]:
+        if "cpu" in self.config[DEVICE]:
             self.strategy = tf.distribute.OneDeviceStrategy(device=self.config[DEVICE])
-        else:
+        elif "gpu" in self.config[DEVICE]:
             self.strategy = tf.distribute.MirroredStrategy(devices=self.config[DEVICE].split(";"))
+        else:
+            resolver = tf.distribute.cluster_resolver.TPUClusterResolver()
+            tf.config.experimental_connect_to_cluster(resolver)
+            tf.tpu.experimental.initialize_tpu_system(resolver)
+            self.strategy = tf.distribute.experimental.TPUStrategy(resolver)
 
     def _init_fields(self):
         """Create fields from config"""

@@ -87,6 +87,14 @@ class UNet(tf.keras.models.Model):
         return rgb_img
 
 
+class UNet32(UNet):
+    def __init__(self, resolution: int, input_channels: int, output_channels: int, filters: int = 64):
+        super().__init__(resolution=resolution,
+                         input_channels=input_channels,
+                         output_channels=output_channels,
+                         filters=filters, n_blocks=5)
+
+
 class UNet64(UNet):
     def __init__(self, resolution: int, input_channels: int, output_channels: int, filters: int = 64):
         super().__init__(resolution=resolution,
@@ -109,3 +117,19 @@ class UNet256(UNet):
                          input_channels=input_channels,
                          output_channels=output_channels,
                          filters=filters, n_blocks=8)
+
+
+class UNet512(UNet):
+    def __init__(self, resolution: int, input_channels: int, output_channels: int, filters: int = 64):
+        super().__init__(resolution=resolution,
+                         input_channels=input_channels,
+                         output_channels=output_channels,
+                         filters=filters, n_blocks=9)
+
+
+class UNet1024(UNet):
+    def __init__(self, resolution: int, input_channels: int, output_channels: int, filters: int = 64):
+        super().__init__(resolution=resolution,
+                         input_channels=input_channels,
+                         output_channels=output_channels,
+                         filters=filters, n_blocks=10)

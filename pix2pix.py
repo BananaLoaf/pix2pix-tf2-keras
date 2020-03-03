@@ -1,6 +1,6 @@
 import os
 import datetime
-from typing import Tuple, List
+from typing import Tuple, List, ContextManager
 import json
 
 import cv2
@@ -111,6 +111,18 @@ class Pix2Pix:
         self.D_ckpt.restore(self.D_ckpt_manager.latest_checkpoint)
         self.G_ckpt.restore(self.G_ckpt_manager.latest_checkpoint)
 
+    def _train_context(self) -> ContextManager:
+        if self.config[USE_TPU]:
+            cluster_resolver = tf.distribute.cluster_resolver.TPUClusterResolver()
+            tf.config.experimental_connect_to_cluster(cluster_resolver)
+            tf.tpu.experimental.initialize_tpu_system(cluster_resolver)
+            return tf.distribute.experimental.TPUStrategy(cluster_resolver).scope()
+
+        elif "cpu" in self.config[DEVICE]:
+            return tf.device(self.config[DEVICE])
+        else:
+            return tf.distribute.MirroredStrategy(devices=self.config[DEVICE].split(";")).scope()
+
     @classmethod
     def new_run(cls, config: Config):
         self = cls(config=config,
@@ -130,6 +142,10 @@ class Pix2Pix:
         return self
 
     def train(self):
+        with self._train_context():
+            self._train()
+
+    def _train(self):
         # Discriminator ground truths
         REAL_D = np.ones((self.dataloader.batch_size, *self.D_net.output_shape[1:]))
         FAKE_D = np.zeros((self.dataloader.batch_size, *self.D_net.output_shape[1:]))

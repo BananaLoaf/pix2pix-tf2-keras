@@ -4,6 +4,10 @@ from config import *
 from generator import *
 from dataloader import *
 
+
+ALL_DEVICES = [dev.name.replace("device:", "") for dev in tf.config.list_logical_devices()]
+
+
 if __name__ == '__main__':
     parser = ArgumentParser(description="Pix2Pix tensorflow 2 keras implementation")
     parser.add_argument("--name", type=str, required=True, help="Model name",
@@ -23,6 +27,14 @@ if __name__ == '__main__':
                         dest=DATALOADER)
     parser.add_argument("--dataset", type=str, required=True, help="Path to dataset",
                         dest=DATASET)
+    # Device
+    device_group = parser.add_mutually_exclusive_group(required=False)
+    device_group.add_argument("--cpu", type=str, default="/cpu:0", choices=list(filter(lambda dev: "/cpu" in dev, ALL_DEVICES)), help="Single CPU (default: %(default)s)",
+                              dest=DEVICE)
+    device_group.add_argument("--gpu", type=str, help=f"Available GPUs: {list(filter(lambda dev: '/gpu' in dev, ALL_DEVICES))}, list devices with ; delimiter",
+                              dest=DEVICE)
+    parser.add_argument("--tpu", action="store_true", default=False, help=f"Experimental utilization of Google Cloud TPUs. If supplied, --cpu and --gpu arguments are ignored",
+                        dest=USE_TPU)
     # Training params
     parser.add_argument("--lr", type=float, default=0.0002, help="Adam Learning rate (default: %(default)s)",
                         dest=LEARNING_RATE)

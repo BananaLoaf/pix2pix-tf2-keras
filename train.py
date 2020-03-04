@@ -1,8 +1,6 @@
 from argparse import ArgumentParser
 
-import tensorflow as tf
-
-from config import *
+from etc.config import *
 from generator import *
 from dataloader import *
 

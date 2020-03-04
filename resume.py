@@ -2,7 +2,7 @@ from argparse import ArgumentParser
 
 from pathlib import Path
 
-from config import Config
+from etc.config import Config
 
 if __name__ == '__main__':
     parser = ArgumentParser(description="Pix2Pix tensorflow 2 keras implementation")

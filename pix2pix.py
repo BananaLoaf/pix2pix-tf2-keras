@@ -1,19 +1,15 @@
 import os
 import datetime
-from typing import Tuple, List, Optional
-import json
+from typing import Optional
 
 import cv2
-from pathlib import Path
-import numpy as np
-import tensorflow as tf
 from tqdm import tqdm
 
-from config import *
+from etc.config import *
 from generator import *
 from dataloader import *
 from dataloader.template import DataLoader
-from discriminator import Discriminator
+from etc.discriminator import Discriminator
 
 
 class Pix2Pix:

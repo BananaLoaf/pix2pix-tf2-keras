@@ -215,6 +215,8 @@ class Pix2Pix:
                 self._save_config()
 
         print("Saving models")
+        self._snap(self.config[EPOCHS])
+        self._save_config()
         self._save_models()
 
     # Helpers

@@ -72,8 +72,7 @@ class UNet(tf.keras.models.Model):
 
         return x
 
-    def generate_samples(self, real_As: tf.Tensor, real_Bs: tf.Tensor):
-        """Must return RGB image if possible, else None"""
+    def generate_samples(self, real_As: tf.Tensor, real_Bs: tf.Tensor) -> np.ndarray:
         n = real_As.shape[0]
         fake_As = self(real_Bs).numpy()
 

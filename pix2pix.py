@@ -151,12 +151,14 @@ class Pix2Pix:
             # Train on the dataset
             pbar = tqdm(range(self.dataloader.batches))
             for batch_i, (real_As, Bs) in enumerate(self.dataloader.yield_batch()):
+                assert isinstance(real_As, tf.Tensor)
+                assert isinstance(Bs, tf.Tensor)
                 ################################################################
                 # Save sample images
                 if self.config[STEP] % self.config[SAMPLE_FREQ] == 0:
                     img_As, img_Bs = self.dataloader.get_records(self.config[SAMPLE_N])
                     rgb_img = self.G_net.generate_samples(img_As, img_Bs)
-                    if rgb_img is not None:
+                    if rgb_img is not None and type(rgb_img) is np.ndarray:
                         img_path = self.samples_path.joinpath(f"{str(self.config[STEP]).zfill(10)}.png")
                         cv2.imwrite(str(img_path), cv2.cvtColor(rgb_img, cv2.COLOR_RGB2BGR))
 

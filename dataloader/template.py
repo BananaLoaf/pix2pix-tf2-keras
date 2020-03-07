@@ -18,7 +18,7 @@ class DataLoader:
         raise NotImplementedError
         return 0
 
-    def get_records(self, n: int) -> Tuple[tf.Tensor, ...]:
+    def get_random(self, n: int) -> Tuple[tf.Tensor, ...]:
         raise NotImplementedError
 
         # Example

@@ -22,102 +22,84 @@ def check_types(validator, types, instance, schema):
 Validator = validators.extend(Draft7Validator, {"properties": set_defaults, "type": check_types})
 
 
-NAME = "NAME"
+class CFields:
+    NAME = "NAME"
 
-RESOLUTION = "RESOLUTION"
-IN_CHANNELS = "IN_CHANNELS"
-OUT_CHANNELS = "OUT_CHANNELS"
-FILTERS = "FILTERS"
-GENERATOR = "GENERATOR"
-DATALOADER = "DATALOADER"
-DATASET = "DATASET"
+    RESOLUTION = "RESOLUTION"
+    IN_CHANNELS = "IN_CHANNELS"
+    OUT_CHANNELS = "OUT_CHANNELS"
+    FILTERS = "FILTERS"
+    GENERATOR = "GENERATOR"
+    DATALOADER = "DATALOADER"
+    DATASET = "DATASET"
 
-DEVICE = "DEVICE"
-XLA = "XLA"
+    DEVICE = "DEVICE"
+    XLA_JIT = "XLA_JIT"
 
-LEARNING_RATE = "LEARNING_RATE"
-BETA1 = "BETA1"
-G_L1_LAMBDA = "G_L1_LAMBDA"
-BATCH_SIZE = "BATCH_SIZE"
-STEP = "STEP"
-EPOCH = "EPOCH"
-EPOCHS = "EPOCHS"
+    LEARNING_RATE = "LEARNING_RATE"
+    BETA1 = "BETA1"
+    G_L1_LAMBDA = "G_L1_LAMBDA"
+    BATCH_SIZE = "BATCH_SIZE"
+    ITERATION = "ITERATION"
+    ITERATIONS = "ITERATIONS"
 
-SAMPLE_N = "SAMPLE_N"
-SAMPLE_FREQ = "SAMPLE_FREQ"
-CHECKPOINT_FREQ = "CHECKPOINT_FREQ"
+    SAMPLE_N = "SAMPLE_N"
+    SAMPLE_FREQ = "SAMPLE_FREQ"
+    CHECKPOINT_FREQ = "CHECKPOINT_FREQ"
 
+    @classmethod
+    def schema(cls) -> dict:
+        self = cls()
 
-CONFIG_SCHEMA = {
-    "type": dict,
-    "required": [
-        NAME,
+        return {
+            "type": dict,
+            "required": list(filter(
+                lambda x: isinstance(x, str), self.__dict__.values()
+            )),
+            "properties": {
+                self.NAME: {"type": str},
 
-        RESOLUTION,
-        IN_CHANNELS,
-        OUT_CHANNELS,
-        FILTERS,
-        GENERATOR,
-        DATALOADER,
-        DATASET,
+                self.RESOLUTION: {"type": int},
+                self.IN_CHANNELS: {"type": int},
+                self.OUT_CHANNELS: {"type": int},
+                self.FILTERS: {"type": int},
+                self.GENERATOR: {"type": str},
+                self.DATALOADER: {"type": str},
+                self.DATASET: {"type": str},
 
-        DEVICE,
-        XLA,
+                self.DEVICE: {"type": str},
+                self.XLA_JIT: {"type": bool},
 
-        LEARNING_RATE,
-        BETA1,
-        G_L1_LAMBDA,
-        BATCH_SIZE,
-        EPOCHS,
+                self.LEARNING_RATE: {"type": float},
+                self.BETA1: {"type": float},
+                self.G_L1_LAMBDA: {"type": float},
+                self.BATCH_SIZE: {"type": int},
+                self.ITERATION: {"type": int, "default": 0},
+                self.ITERATIONS: {"type": int},
 
-        SAMPLE_N,
-        SAMPLE_FREQ,
-        CHECKPOINT_FREQ,
-    ],
-    "properties": {
-        NAME: {"type": str},
-
-        RESOLUTION: {"type": int},
-        IN_CHANNELS: {"type": int},
-        OUT_CHANNELS: {"type": int},
-        FILTERS: {"type": int},
-        GENERATOR: {"type": str},
-        DATALOADER: {"type": str},
-        DATASET: {"type": str},
-
-        DEVICE: {"type": str},
-        XLA: {"type": bool},
-
-        LEARNING_RATE: {"type": float},
-        BETA1: {"type": float},
-        G_L1_LAMBDA: {"type": float},
-        BATCH_SIZE: {"type": int},
-        STEP: {"type": int, "default": 0},
-        EPOCH: {"type": int, "default": 0},
-        EPOCHS: {"type": int},
-
-        SAMPLE_N: {"type": int},
-        SAMPLE_FREQ: {"type": int},
-        CHECKPOINT_FREQ: {"type": int}
-    }
-}
+                self.SAMPLE_N: {"type": int},
+                self.SAMPLE_FREQ: {"type": int},
+                self.CHECKPOINT_FREQ: {"type": int}
+            }
+        }
 
 
 class Config:
-    EDITABLE: tuple = (STEP, EPOCH)
+    _editable: tuple = (CFields.ITERATION, )
     _data: dict = {}
 
     def __getitem__(self, item):
         return self._data[item]
 
     def __setitem__(self, key, value):
-        if key in self.EDITABLE:
+        if key in self._editable:
             self._data[key] = value
         else:
             raise KeyError(f"Item '{key}' is not editable")
 
     def _validate(self):
-        Validator(CONFIG_SCHEMA).validate(self._data)
+        schema = CFields.schema()
+        Validator(schema).validate(self._data)
 
     def save(self, path: Path):
         with path.open("w") as file:

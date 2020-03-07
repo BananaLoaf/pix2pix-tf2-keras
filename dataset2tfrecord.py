@@ -43,22 +43,29 @@ if __name__ == '__main__':
     path_B = Path(args[PATH_B])
 
     with tf.io.TFRecordWriter(args[OUTPUT]) as writer:
-        for filename_A in path_A.glob("*.*"):
-            filename_B = next(path_B.glob(f"{filename_A.stem}.*"))
-            print(f"A: {filename_A}, B: {filename_B}")
+        for i, filename_A in enumerate(path_A.glob("*.*")):
+            try:
+                filename_B = next(path_B.glob(f"{filename_A.stem}.*"))
+                print(f"{i}) A: {filename_A}, B: {filename_B}")
 
-            img_A = imread(path=filename_A, gs=args[GS_A], resolution=args[RES])
-            img_B = imread(path=filename_B, gs=args[GS_B], resolution=args[RES])
+                img_A = imread(path=filename_A, gs=args[GS_A], resolution=args[RES])
+                img_B = imread(path=filename_B, gs=args[GS_B], resolution=args[RES])
 
-            pair_dict = {
-                "A": tf.train.Feature(bytes_list=
-                                      tf.train.BytesList(value=[pickle.dumps(img_A)])
-                                      ),
-                "B": tf.train.Feature(bytes_list=
-                                      tf.train.BytesList(value=[pickle.dumps(img_B)])
-                                      ),
-            }
-            pair = tf.train.Features(feature=pair_dict)
+                pair_dict = {
+                    "i": tf.train.Feature(int64_list=
+                                          tf.train.Int64List(value=[i])
+                                          ),
+                    "A": tf.train.Feature(bytes_list=
+                                          tf.train.BytesList(value=[pickle.dumps(img_A)])
+                                          ),
+                    "B": tf.train.Feature(bytes_list=
+                                          tf.train.BytesList(value=[pickle.dumps(img_B)])
+                                          ),
+                }
+                pair = tf.train.Features(feature=pair_dict)
 
-            example = tf.train.Example(features=pair)
-            writer.write(example.SerializeToString())
+                example = tf.train.Example(features=pair)
+                writer.write(example.SerializeToString())
+
+            except StopIteration:
+                print(f"{i}) A: {filename_A}, B: -")

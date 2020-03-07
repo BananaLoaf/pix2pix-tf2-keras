@@ -152,12 +152,12 @@ class Pix2Pix:
         pbar = tqdm(range(self.config[CFields.ITERATIONS]))
         pbar.update(self.config[CFields.ITERATION])
         for iteration in range(self.config[CFields.ITERATION], self.config[CFields.ITERATIONS]):
-            real_As, Bs = self.dataloader.get_random(self.config[CFields.BATCH_SIZE])
+            real_As, Bs = self.dataloader.get_random()
             assert isinstance(real_As, tf.Tensor)
             assert isinstance(Bs, tf.Tensor)
 
             ################################################################
-            # Save sample images
+            # Save sample image
             if self.config[CFields.ITERATION] % self.config[CFields.SAMPLE_FREQ] == 0:
                 img_As, img_Bs = self.dataloader.get_random(self.config[CFields.SAMPLE_N])
                 rgb_img = self.G_net.generate_samples(img_As, img_Bs)

@@ -129,7 +129,7 @@ class Pix2Pix:
     @classmethod
     def new_run(cls, config: Config):
         self = cls(config=config,
-                   run_directory=Path(f"result/{config[CFields.NAME]}_{datetime.datetime.now().replace(microsecond=0).isoformat()}"))
+                   run_directory=Path(f"{config[CFields.OUTPUT_PATH]}/{config[CFields.NAME]}_{datetime.datetime.now().replace(microsecond=0).isoformat()}"))
         self._summary()
         self._snap(0)
         self._save_config()

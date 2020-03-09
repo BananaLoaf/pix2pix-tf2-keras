@@ -43,6 +43,7 @@ class CFields:
     ITERATION = "ITERATION"
     ITERATIONS = "ITERATIONS"
 
+    OUTPUT_PATH = "OUTPUT_PATH"
     SAMPLE_N = "SAMPLE_N"
     SAMPLE_FREQ = "SAMPLE_FREQ"
     CHECKPOINT_FREQ = "CHECKPOINT_FREQ"
@@ -77,6 +78,7 @@ class CFields:
                 self.ITERATION: {"type": int, "default": 0},
                 self.ITERATIONS: {"type": int},
 
+                self.OUTPUT_PATH: {"type": str},
                 self.SAMPLE_N: {"type": int},
                 self.SAMPLE_FREQ: {"type": int},
                 self.CHECKPOINT_FREQ: {"type": int}

@@ -49,6 +49,8 @@ if __name__ == '__main__':
     parser.add_argument("-i", "--iterations", type=int, default=1_000_000, help="Iterations (default: %(default)s)",
                         dest=CFields.ITERATIONS)
     # Training options
+    parser.add_argument("-o", "--output", type=str, default="result", help="Output path for run folder (default: %(default)s)",
+                        dest=CFields.OUTPUT_PATH)
     parser.add_argument("-sn", "--sample-n", type=int, default=6, help="Amount of samples (default: %(default)s)",
                         dest=CFields.SAMPLE_N)
     parser.add_argument("-sf", "--sample-freq", type=int, default=100, help="Sampling frequency in iterations (default: %(default)s)",

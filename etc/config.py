@@ -1,5 +1,6 @@
 from argparse import Namespace
 import json
+from copy import deepcopy
 
 from jsonschema import Draft7Validator, validators, ValidationError
 from pathlib import Path
@@ -22,7 +23,7 @@ def check_types(validator, types, instance, schema):
 Validator = validators.extend(Draft7Validator, {"properties": set_defaults, "type": check_types})
 
 
-class CFields:
+class CF:  # Config Fields
     NAME = "NAME"
 
     RESOLUTION = "RESOLUTION"
@@ -43,7 +44,6 @@ class CFields:
     ITERATION = "ITERATION"
     ITERATIONS = "ITERATIONS"
 
-    OUTPUT_PATH = "OUTPUT_PATH"
     SAMPLE_N = "SAMPLE_N"
     SAMPLE_FREQ = "SAMPLE_FREQ"
     CHECKPOINT_FREQ = "CHECKPOINT_FREQ"
@@ -78,7 +78,6 @@ class CFields:
                 self.ITERATION: {"type": int, "default": 0},
                 self.ITERATIONS: {"type": int},
 
-                self.OUTPUT_PATH: {"type": str},
                 self.SAMPLE_N: {"type": int},
                 self.SAMPLE_FREQ: {"type": int},
                 self.CHECKPOINT_FREQ: {"type": int}
@@ -87,7 +86,7 @@ class CFields:
 
 
 class Config:
-    _editable: tuple = (CFields.ITERATION, )
+    _editable: tuple = (CF.ITERATION,)
     _data: dict = {}
 
     def __getitem__(self, item):
@@ -99,8 +98,14 @@ class Config:
         else:
             raise KeyError(f"Item '{key}' is not editable")
 
+    def __delitem__(self, key):
+        if key not in CF.__dict__.values():
+            del self._data[key]
+        else:
+            raise NotImplementedError
+
     def _validate(self):
-        schema = CFields.schema()
+        schema = CF.schema()
         Validator(schema).validate(self._data)
 
     def save(self, path: Path):
@@ -110,7 +115,7 @@ class Config:
     @classmethod
     def from_args(cls, args: Namespace):
         self = cls()
-        self._data = vars(args)
+        self._data = vars(deepcopy(args))
         self._validate()
         return self
 

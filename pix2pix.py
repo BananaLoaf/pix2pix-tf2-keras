@@ -6,7 +6,7 @@ from pathlib import Path
 import cv2
 from tqdm import tqdm
 
-from etc.config import Config, CFields
+from etc.config import Config, CF
 from generator import *
 from dataloader import *
 from dataloader.template import DataLoader
@@ -37,7 +37,7 @@ class Pix2Pix:
         tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
         self.config = config
 
-        if self.config[CFields.XLA_JIT]:
+        if self.config[CF.XLA_JIT]:
             os.environ["TF_XLA_FLAGS"] = "--tf_xla_auto_jit=2 --tf_xla_cpu_global_jit"
 
         self.run_path = run_directory
@@ -69,23 +69,23 @@ class Pix2Pix:
         return wrapper
 
     def _init_strategy(self):
-        if "GPU" in self.config[CFields.DEVICE]:
-            self.strategy = tf.distribute.MirroredStrategy(devices=self.config[CFields.DEVICE].split(","))
-        elif "CPU" in self.config[CFields.DEVICE]:
-            self.strategy = tf.distribute.OneDeviceStrategy(device=self.config[CFields.DEVICE])
+        if "GPU" in self.config[CF.DEVICE]:
+            self.strategy = tf.distribute.MirroredStrategy(devices=self.config[CF.DEVICE].split(","))
+        elif "CPU" in self.config[CF.DEVICE]:
+            self.strategy = tf.distribute.OneDeviceStrategy(device=self.config[CF.DEVICE])
         else:
-            resolver = tf.distribute.cluster_resolver.TPUClusterResolver()
+            resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu=self.config[CF.DEVICE])
             tf.config.experimental_connect_to_cluster(resolver)
             tf.tpu.experimental.initialize_tpu_system(resolver)
             self.strategy = tf.distribute.experimental.TPUStrategy(resolver)
 
     def _init_fields(self):
         """Create fields from config"""
-        DataLoader_class = DATALOADERS[self.config[CFields.DATALOADER]]
-        self.dataloader = DataLoader_class(dataset=Path(self.config[CFields.DATASET]),
-                                           batch_size=self.config[CFields.BATCH_SIZE],
-                                           resolution=self.config[CFields.RESOLUTION],
-                                           channels=self.config[CFields.IN_CHANNELS])
+        DataLoader_class = DATALOADERS[self.config[CF.DATALOADER]]
+        self.dataloader = DataLoader_class(dataset=Path(self.config[CF.DATASET]),
+                                           batch_size=self.config[CF.BATCH_SIZE],
+                                           resolution=self.config[CF.RESOLUTION],
+                                           channels=self.config[CF.IN_CHANNELS])
         self.writer = tf.summary.create_file_writer(str(self.run_path))
 
         ################################################################
@@ -103,34 +103,34 @@ class Pix2Pix:
     @strategy_scope
     def _init_networks(self):
         """Create nets from config"""
-        self.D_net = Discriminator(input_resolution=self.config[CFields.RESOLUTION],
-                                   input_channels=self.config[CFields.IN_CHANNELS],
-                                   filters=self.config[CFields.FILTERS])
+        self.D_net = Discriminator(input_resolution=self.config[CF.RESOLUTION],
+                                   input_channels=self.config[CF.IN_CHANNELS],
+                                   filters=self.config[CF.FILTERS])
 
-        self.D_optimizer = tf.keras.optimizers.Adam(learning_rate=self.config[CFields.LEARNING_RATE],
-                                                    beta_1=self.config[CFields.BETA1])
+        self.D_optimizer = tf.keras.optimizers.Adam(learning_rate=self.config[CF.LEARNING_RATE],
+                                                    beta_1=self.config[CF.BETA1])
         self.D_ckpt = tf.train.Checkpoint(optimizer=self.D_optimizer, model=self.D_net)
         self.D_ckpt_manager = tf.train.CheckpointManager(self.D_ckpt, directory=str(self.checkpoints_path.joinpath("D")),
-                                                         max_to_keep=self.config[CFields.ITERATIONS], checkpoint_name="D")
+                                                         max_to_keep=self.config[CF.ITERATIONS], checkpoint_name="D")
 
         ################################################################
-        Generator_class = GENERATORS[self.config[CFields.GENERATOR]]
-        self.G_net = Generator_class(resolution=self.config[CFields.RESOLUTION],
-                                     input_channels=self.config[CFields.IN_CHANNELS],
-                                     output_channels=self.config[CFields.OUT_CHANNELS],
-                                     filters=self.config[CFields.FILTERS])
+        Generator_class = GENERATORS[self.config[CF.GENERATOR]]
+        self.G_net = Generator_class(resolution=self.config[CF.RESOLUTION],
+                                     input_channels=self.config[CF.IN_CHANNELS],
+                                     output_channels=self.config[CF.OUT_CHANNELS],
+                                     filters=self.config[CF.FILTERS])
 
-        self.G_optimizer = tf.keras.optimizers.Adam(learning_rate=self.config[CFields.LEARNING_RATE],
-                                                    beta_1=self.config[CFields.BETA1])
+        self.G_optimizer = tf.keras.optimizers.Adam(learning_rate=self.config[CF.LEARNING_RATE],
+                                                    beta_1=self.config[CF.BETA1])
         self.G_ckpt = tf.train.Checkpoint(optimizer=self.G_optimizer, model=self.G_net)
         self.G_ckpt_manager = tf.train.CheckpointManager(self.G_ckpt, directory=str(self.checkpoints_path.joinpath("G")),
-                                                         max_to_keep=self.config[CFields.ITERATIONS], checkpoint_name="G")
+                                                         max_to_keep=self.config[CF.ITERATIONS], checkpoint_name="G")
 
     @classmethod
-    def new_run(cls, config: Config):
+    def new_run(cls, config: Config, output: str, plot: bool):
         self = cls(config=config,
-                   run_directory=Path(f"{config[CFields.OUTPUT_PATH]}/{config[CFields.NAME]}_{datetime.datetime.now().replace(microsecond=0).isoformat()}"))
-        self._summary()
+                   run_directory=Path(f"{output}/{config[CF.NAME]}_{datetime.datetime.now().replace(microsecond=0).isoformat()}"))
+        self._summary(plot)
         self._snap(0)
         self._save_config()
         return self
@@ -149,21 +149,21 @@ class Pix2Pix:
         REAL_D = tf.convert_to_tensor(np.ones((self.dataloader.batch_size, *self.D_net.output_shape[1:])))
         FAKE_D = tf.convert_to_tensor(np.zeros((self.dataloader.batch_size, *self.D_net.output_shape[1:])))
 
-        pbar = tqdm(range(self.config[CFields.ITERATIONS]))
-        pbar.update(self.config[CFields.ITERATION])
-        for iteration in range(self.config[CFields.ITERATION], self.config[CFields.ITERATIONS]):
+        pbar = tqdm(range(self.config[CF.ITERATIONS]))
+        pbar.update(self.config[CF.ITERATION])
+        for iteration in range(self.config[CF.ITERATION], self.config[CF.ITERATIONS]):
             real_As, Bs = self.dataloader.get_random()
             assert isinstance(real_As, tf.Tensor)
             assert isinstance(Bs, tf.Tensor)
 
             ################################################################
             # Save sample image
-            if self.config[CFields.ITERATION] % self.config[CFields.SAMPLE_FREQ] == 0:
-                img_As, img_Bs = self.dataloader.get_random(self.config[CFields.SAMPLE_N])
+            if self.config[CF.ITERATION] % self.config[CF.SAMPLE_FREQ] == 0:
+                img_As, img_Bs = self.dataloader.get_random(self.config[CF.SAMPLE_N])
                 rgb_img = self.G_net.generate_samples(img_As, img_Bs)
                 assert type(rgb_img) is np.ndarray
                 if rgb_img is not None:
-                    img_path = self.samples_path.joinpath(f"{str(self.config[CFields.ITERATION]).zfill(10)}.png")
+                    img_path = self.samples_path.joinpath(f"{str(self.config[CF.ITERATION]).zfill(10)}.png")
                     cv2.imwrite(str(img_path), cv2.cvtColor(rgb_img, cv2.COLOR_RGB2BGR))
 
             ################################################################
@@ -185,7 +185,7 @@ class Pix2Pix:
                     fake_D = self.D_net([fake_As, Bs], training=False)
 
                 G_GAN_loss = tf.reduce_mean(tf.losses.MSE(REAL_D, fake_D))
-                G_L1 = tf.reduce_mean(tf.losses.MAE(real_As, fake_As)) * self.config[CFields.G_L1_LAMBDA]
+                G_L1 = tf.reduce_mean(tf.losses.MAE(real_As, fake_As)) * self.config[CF.G_L1_LAMBDA]
 
                 grads = tape.gradient(G_GAN_loss + G_L1, self.G_net.trainable_variables)
             self.G_optimizer.apply_gradients(zip(grads, self.G_net.trainable_variables))
@@ -193,25 +193,25 @@ class Pix2Pix:
             ################################################################
             # Write stuff
             with self.writer.as_default():
-                tf.summary.scalar("D_L1", D_L1, step=self.config[CFields.ITERATION])
-                tf.summary.scalar("G_L1", G_L1, step=self.config[CFields.ITERATION])
-                tf.summary.scalar("G_GAN_loss", G_GAN_loss, step=self.config[CFields.ITERATION])
+                tf.summary.scalar("D_L1", D_L1, step=self.config[CF.ITERATION])
+                tf.summary.scalar("G_L1", G_L1, step=self.config[CF.ITERATION])
+                tf.summary.scalar("G_GAN_loss", G_GAN_loss, step=self.config[CF.ITERATION])
             self.writer.flush()
 
             ################################################################
             # Status info
-            pbar.set_description(f"[D_L1: {D_L1:.3f}] [G_GAN_loss: {G_GAN_loss:.3f}, G_L1: {G_L1:.3f}] ")
+            pbar.set_description(f"[D_L1: {D_L1:.3f}] [G_GAN_loss: {G_GAN_loss:.3f}, G_L1: {G_L1:.3f}]")
             pbar.update()
-            self.config[CFields.ITERATION] = iteration + 1
+            self.config[CF.ITERATION] = iteration + 1
 
             # Checkpoint
-            if iteration % self.config[CFields.CHECKPOINT_FREQ] == 0:
-                print("\nSaving checkpoint")
+            if iteration % self.config[CF.CHECKPOINT_FREQ] == 0:
                 self._snap(iteration)
                 self._save_config()
+                print("\nCheckpoints saved")
 
         print("Saving models")
-        self._snap(self.config[CFields.ITERATIONS])
+        self._snap(self.config[CF.ITERATIONS])
         self._save_config()
         self._save_models()
 
@@ -236,6 +236,7 @@ class Pix2Pix:
     def _save_config(self):
         self.config.save(self.run_path.joinpath("config.json"))
 
+    @strategy_scope
     def _restore(self):
         self.D_ckpt.restore(self.D_ckpt_manager.latest_checkpoint)
         self.G_ckpt.restore(self.G_ckpt_manager.latest_checkpoint)

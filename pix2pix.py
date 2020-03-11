@@ -64,7 +64,7 @@ class Pix2Pix:
                     with strategy.scope():
                         return func(*args, **kwargs)
 
-            tf.distribute.get_replica_context().merge_call(lambda strategy: descoper(strategy, *args, **kwargs))
+            return tf.distribute.get_replica_context().merge_call(lambda strategy: descoper(strategy, *args, **kwargs))
 
         return wrapper
 
@@ -167,17 +167,6 @@ class Pix2Pix:
                     cv2.imwrite(str(img_path), cv2.cvtColor(rgb_img, cv2.COLOR_RGB2BGR))
 
             ################################################################
-            #  Train Discriminator
-            fake_As = self.G_net(Bs)
-            with tf.GradientTape() as tape:
-                real_D_L1 = tf.losses.MSE(REAL_D, self.D_net([real_As, Bs], training=True))
-                fake_D_L1 = tf.losses.MSE(FAKE_D, self.D_net([fake_As, Bs], training=True))
-                D_L1 = tf.reduce_mean(real_D_L1 + fake_D_L1)
-
-                grads = tape.gradient(D_L1, self.D_net.trainable_variables)
-            self.D_optimizer.apply_gradients(zip(grads, self.D_net.trainable_variables))
-
-            ################################################################
             #  Train Generator
             with tf.GradientTape() as tape:
                 fake_As = self.G_net(Bs, training=True)
@@ -189,6 +178,16 @@ class Pix2Pix:
 
                 grads = tape.gradient(G_GAN_loss + G_L1, self.G_net.trainable_variables)
             self.G_optimizer.apply_gradients(zip(grads, self.G_net.trainable_variables))
+
+            ################################################################
+            #  Train Discriminator
+            with tf.GradientTape() as tape:
+                real_D_L1 = tf.losses.MSE(REAL_D, self.D_net([real_As, Bs], training=True))
+                fake_D_L1 = tf.losses.MSE(FAKE_D, self.D_net([fake_As, Bs], training=True))
+                D_L1 = tf.reduce_mean(real_D_L1 + fake_D_L1)
+
+                grads = tape.gradient(D_L1, self.D_net.trainable_variables)
+            self.D_optimizer.apply_gradients(zip(grads, self.D_net.trainable_variables))
 
             ################################################################
             # Write stuff

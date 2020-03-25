@@ -152,17 +152,17 @@ class Pix2Pix:
         pbar = tqdm(range(self.config[CF.ITERATIONS]))
         pbar.update(self.config[CF.ITERATION])
         for iteration in range(self.config[CF.ITERATION], self.config[CF.ITERATIONS]):
-            real_As, Bs = self.dataloader.get_random()
+            real_As, Bs = next(self.dataloader)
             assert isinstance(real_As, tf.Tensor)
             assert isinstance(Bs, tf.Tensor)
 
             ################################################################
             # Save sample image
             if self.config[CF.ITERATION] % self.config[CF.SAMPLE_FREQ] == 0:
-                img_As, img_Bs = self.dataloader.get_random(self.config[CF.SAMPLE_N])
+                with self.dataloader.with_batch_size(self.config[CF.SAMPLE_N]):
+                    img_As, img_Bs = next(self.dataloader)
                 rgb_img = self.G_net.generate_samples(img_As, img_Bs)
-                assert type(rgb_img) is np.ndarray
-                if rgb_img is not None:
+                if rgb_img is not None and type(rgb_img) is np.ndarray:
                     img_path = self.samples_path.joinpath(f"{str(self.config[CF.ITERATION]).zfill(10)}.png")
                     cv2.imwrite(str(img_path), cv2.cvtColor(rgb_img, cv2.COLOR_RGB2BGR))
 
@@ -170,8 +170,7 @@ class Pix2Pix:
             #  Train Generator
             with tf.GradientTape() as tape:
                 fake_As = self.G_net(Bs, training=True)
-                with tape.stop_recording():
-                    fake_D = self.D_net([fake_As, Bs], training=False)
+                fake_D = self.D_net([fake_As, Bs], training=False)
 
                 G_GAN_loss = tf.reduce_mean(tf.losses.MSE(REAL_D, fake_D))
                 G_L1 = tf.reduce_mean(tf.losses.MAE(real_As, fake_As)) * self.config[CF.G_L1_LAMBDA]

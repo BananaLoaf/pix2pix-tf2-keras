@@ -13,18 +13,27 @@ class DataLoader:
         self.resolution = resolution
         self.channels = channels
 
-    @property
-    def batches(self) -> int:
-        raise NotImplementedError
-        return 0
-
-    def get_random(self, n: Optional[int] = None) -> Tuple[tf.Tensor, ...]:
+    def __len__(self):
         raise NotImplementedError
 
-        # Example
-        if n is None:
-            n = self.batch_size
-        assert n <= len(self), "n is bigger than dataset"
+    def with_batch_size(dl, n: int):
+        class Context:
+            old_batch_size = dl.batch_size
+            new_batch_size = n
 
-        img_As = img_Bs = np.random.rand((n, 512, 512, 3))  # (n, resolution, resolution, channels)
-        return tf.convert_to_tensor(img_As), tf.convert_to_tensor(img_Bs)
+            def __enter__(self):
+                dl.batch_size = self.new_batch_size
+
+            def __exit__(self, exc_type, exc_val, exc_tb):
+                dl.batch_size = self.old_batch_size
+
+        return Context()
+
+    def __next__(self) -> Tuple[tf.Tensor, ...]:
+        """
+        Example:
+            >>> assert self.batch_size <= len(self), "n is bigger than dataset"
+            >>> img_As = img_Bs = np.random.rand((self.batch_size, self.resolution, self.resolution, self.channels))  # (batch_size, resolution, resolution, channels)
+            >>> return tf.convert_to_tensor(img_As), tf.convert_to_tensor(img_Bs)
+        """
+        raise NotImplementedError

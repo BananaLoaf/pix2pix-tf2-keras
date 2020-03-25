@@ -5,11 +5,11 @@ import tensorflow as tf
 
 class Discriminator(tf.keras.models.Model):
     def __init__(self, input_resolution: int, input_channels: int, filters: int):
-        img_PHOTO = tf.keras.layers.Input(shape=(input_resolution, input_resolution, input_channels), name="photo")
-        img_LABEL = tf.keras.layers.Input(shape=(input_resolution, input_resolution, input_channels), name="label")
+        img_A = tf.keras.layers.Input(shape=(input_resolution, input_resolution, input_channels))
+        img_B = tf.keras.layers.Input(shape=(input_resolution, input_resolution, input_channels))
 
         # Stack images
-        combined_imgs = tf.keras.layers.Concatenate(axis=3)([img_PHOTO, img_LABEL])
+        combined_imgs = tf.keras.layers.Concatenate(axis=3)([img_A, img_B])
 
         d1 = self._block(combined_imgs, filters=filters, batch_norm=False)
         d2 = self._block(d1, filters=filters * 2)
@@ -18,10 +18,7 @@ class Discriminator(tf.keras.models.Model):
 
         output_layer = tf.keras.layers.Conv2D(1, kernel_size=4, strides=1, padding='same')(d4)
 
-        super().__init__([img_PHOTO, img_LABEL], output_layer)
-
-    def __repr__(self):
-        return self.__class__.__name__
+        super().__init__([img_A, img_B], output_layer)
 
     def _block(self, input, filters: int, kernel_size: int = 4, batch_norm: bool = True):
         d = tf.keras.layers.Conv2D(filters, kernel_size=kernel_size, strides=2, padding='same')(input)

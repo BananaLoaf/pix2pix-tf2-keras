@@ -19,13 +19,16 @@ def imread(path: Path, gs: bool, resolution: int) -> np.ndarray:
     mode = cv2.IMREAD_GRAYSCALE if gs else cv2.IMREAD_COLOR
     img = cv2.imread(str(path), mode)
     img = cv2.resize(img, (resolution, resolution))
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    if gs:
+        img = np.reshape(img, (resolution, resolution, 1))
+    else:
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     return img.astype(np.float) / 127.5 - 1
 
 
 if __name__ == '__main__':
     parser = ArgumentParser(description="TFRecord file generator")
-    parser.add_argument("-o", type=str, default="default.tfrecord", help="Output for TFRecord file (default: %(default)s)",
+    parser.add_argument("-o", type=str, default="default.tfr", help="Output for TFRecord file (default: %(default)s)",
                         dest=OUTPUT)
     parser.add_argument("-r", "--res", type=int, default=256, help="Image resolution (default: %(default)s)",
                         dest=RES)
@@ -37,8 +40,8 @@ if __name__ == '__main__':
     parser.add_argument(PATH_B, type=str, help="Path to B")
     args = vars(parser.parse_args())
 
-    if not args[OUTPUT].endswith(".tfrecord"):
-        args[OUTPUT] += ".tfrecord"
+    if not args[OUTPUT].endswith(".tfr"):
+        args[OUTPUT] += ".tfr"
     path_A = Path(args[PATH_A])
     path_B = Path(args[PATH_B])
 

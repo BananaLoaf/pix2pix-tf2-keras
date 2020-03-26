@@ -36,8 +36,8 @@ if __name__ == '__main__':
                               dest=CF.DEVICE)
     device_group.add_argument("--gpu", type=str, help=f"Available GPUs: {list(filter(lambda dev: 'GPU' in dev, ALL_DEVICES))}, list devices with , delimiter",
                               dest=CF.DEVICE)
-    device_group.add_argument("--tpu", type=str, help=f"TPU name",
-                              dest=CF.DEVICE)
+    device_group.add_argument("--tpu", type=str, default="", help=f"TPU name",
+                              dest=CF.TPU_NAME)
     parser.add_argument("--xla-jit", action="store_true", default=False, help="XLA Just In Time compilation, does not fully support UpSampling2D layer in the TF 2.1.0 and my never will, https://www.tensorflow.org/xla (default: %(default)s)",
                         dest=CF.XLA_JIT)
     # Training params
@@ -61,14 +61,17 @@ if __name__ == '__main__':
     parser.add_argument("-cf", "--checkpoint-freq", type=int, default=10_000, help="Checkpoint frequency in iterations (default: %(default)s)",
                         dest=CF.CHECKPOINT_FREQ)
 
+    # Save options
+    parser.add_argument("--tf", action="store_true", default=True, help="Save as tf model",
+                        dest=CF.TF)
+    parser.add_argument("--tflite", action="store_true", default=False, help="Save as tflite model",
+                        dest=CF.TFLITE)
+    parser.add_argument("--tflite-q", action="store_true", default=False, help="Save as quantizised tflite model",
+                        dest=CF.TFLITE_Q)
+
     args = parser.parse_args()
     config = Config.from_args(args)
-    del config[OUTPUT_PATH]
-    del config[PLOT]
 
     from pix2pix import Pix2Pix
     gan = Pix2Pix.new_run(config, output=getattr(args, OUTPUT_PATH), plot=getattr(args, PLOT))
-    try:
-        gan.train()
-    except KeyboardInterrupt:
-        print("Stopping...")
+    gan.train()

@@ -13,7 +13,4 @@ if __name__ == '__main__':
 
     from pix2pix import Pix2Pix
     gan = Pix2Pix.resume(config=config, run_directory=Path(args.path))
-    try:
-        gan.train()
-    except KeyboardInterrupt:
-        print("Stopping...")
+    gan.train()

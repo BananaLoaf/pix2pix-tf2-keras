@@ -35,6 +35,7 @@ class CF:  # Config Fields
     DATASET = "DATASET"
 
     DEVICE = "DEVICE"
+    TPU_NAME = "TPU_NAME"
     XLA_JIT = "XLA_JIT"
 
     LEARNING_RATE = "LEARNING_RATE"
@@ -47,6 +48,10 @@ class CF:  # Config Fields
     SAMPLE_N = "SAMPLE_N"
     SAMPLE_FREQ = "SAMPLE_FREQ"
     CHECKPOINT_FREQ = "CHECKPOINT_FREQ"
+
+    TF = "TF"
+    TFLITE = "TFLITE"
+    TFLITE_Q = "TFLITE_Q"
 
     @classmethod
     def schema(cls) -> dict:
@@ -69,6 +74,7 @@ class CF:  # Config Fields
                 self.DATASET: {"type": str},
 
                 self.DEVICE: {"type": str},
+                self.TPU_NAME: {"type": str},
                 self.XLA_JIT: {"type": bool},
 
                 self.LEARNING_RATE: {"type": float},
@@ -80,7 +86,11 @@ class CF:  # Config Fields
 
                 self.SAMPLE_N: {"type": int},
                 self.SAMPLE_FREQ: {"type": int},
-                self.CHECKPOINT_FREQ: {"type": int}
+                self.CHECKPOINT_FREQ: {"type": int},
+
+                self.TF: {"type": bool},
+                self.TFLITE: {"type": bool},
+                self.TFLITE_Q: {"type": bool},
             }
         }
 
@@ -116,6 +126,12 @@ class Config:
     def from_args(cls, args: Namespace):
         self = cls()
         self._data = vars(deepcopy(args))
+        for key in list(self._data.keys()):
+            try:
+                del self[key]
+            except NotImplementedError:
+                pass
+
         self._validate()
         return self
 

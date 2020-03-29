@@ -42,16 +42,17 @@ class CF:  # Config Fields
     BETA1 = "BETA1"
     G_L1_LAMBDA = "G_L1_LAMBDA"
     BATCH_SIZE = "BATCH_SIZE"
-    ITERATION = "ITERATION"
-    ITERATIONS = "ITERATIONS"
+    STEP = "STEP"
+    STEPS = "STEPS"
 
     SAMPLE_N = "SAMPLE_N"
     SAMPLE_FREQ = "SAMPLE_FREQ"
     CHECKPOINT_FREQ = "CHECKPOINT_FREQ"
+    METRICS_FREQ = "METRICS_FREQ"
 
-    TF = "TF"
-    TFLITE = "TFLITE"
-    TFLITE_Q = "TFLITE_Q"
+    SAVE_TF = "SAVE_TF"
+    SAVE_TFLITE = "SAVE_TFLITE"
+    SAVE_TFLITE_Q = "SAVE_TFLITE_Q"
 
     @classmethod
     def schema(cls) -> dict:
@@ -81,22 +82,23 @@ class CF:  # Config Fields
                 self.BETA1: {"type": float},
                 self.G_L1_LAMBDA: {"type": float},
                 self.BATCH_SIZE: {"type": int},
-                self.ITERATION: {"type": int, "default": 0},
-                self.ITERATIONS: {"type": int},
+                self.STEP: {"type": int, "default": 0},
+                self.STEPS: {"type": int},
 
                 self.SAMPLE_N: {"type": int},
                 self.SAMPLE_FREQ: {"type": int},
                 self.CHECKPOINT_FREQ: {"type": int},
+                self.METRICS_FREQ: {"type": int},
 
-                self.TF: {"type": bool},
-                self.TFLITE: {"type": bool},
-                self.TFLITE_Q: {"type": bool},
+                self.SAVE_TF: {"type": bool},
+                self.SAVE_TFLITE: {"type": bool},
+                self.SAVE_TFLITE_Q: {"type": bool},
             }
         }
 
 
 class Config:
-    _editable: tuple = (CF.ITERATION,)
+    _editable: tuple = (CF.STEP,)
     _data: dict = {}
 
     def __getitem__(self, item):

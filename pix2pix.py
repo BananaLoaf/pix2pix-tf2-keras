@@ -87,16 +87,16 @@ class Pix2Pix:
                             filters=self.config[CF.FILTERS],
                             lr=self.config[CF.LEARNING_RATE],
                             beta_1=self.config[CF.BETA1],
-                            iterations=self.config[CF.ITERATIONS])
+                            iterations=self.config[CF.STEPS])
 
-    def scope(func):
+    def strat(func):
         """Run function in a strategy context"""
         def wrapper(self, *args, **kwargs):
             return self.strategy.experimental_run_v2(lambda: func(self, *args, **kwargs))
 
         return wrapper
 
-    def descope(func):
+    def destrat(func):
         """Descope function within other context"""
         def wrapper(*args, **kwargs):
             def descoper(strategy: Optional[tf.distribute.Strategy] = None, *args, **kwargs):
@@ -110,7 +110,7 @@ class Pix2Pix:
 
         return wrapper
 
-    @scope
+    @strat
     def _init_networks(self, input_resolution: int, input_channels: int, output_channels: int, filters: int, lr: int, beta_1: int, iterations: int):
         self.D_net = Discriminator(input_resolution=input_resolution,
                                    input_channels=input_channels,
@@ -154,37 +154,33 @@ class Pix2Pix:
 
     def train(self):
         try:
-            self._train(iteration=self.config[CF.ITERATION],
-                        iterations=self.config[CF.ITERATIONS],
+            self._train(step=self.config[CF.STEP],
+                        steps=self.config[CF.STEPS],
                         g_l1_lambda=self.config[CF.G_L1_LAMBDA],
                         sample_freq=self.config[CF.SAMPLE_FREQ],
                         sample_n=self.config[CF.SAMPLE_N],
-                        checkpoint_freq=self.config[CF.CHECKPOINT_FREQ])
+                        checkpoint_freq=self.config[CF.CHECKPOINT_FREQ],
+                        metrics_freq=self.config[CF.METRICS_FREQ])
         except KeyboardInterrupt:
             print("Stopping...")
 
-    @scope
-    def _train(self, iteration: int, iterations: int, g_l1_lambda: float, sample_freq: int, sample_n: int, checkpoint_freq: int):
+    @strat
+    def _train(self, step: int, steps: int, g_l1_lambda: float, sample_freq: int, sample_n: int, checkpoint_freq: int, metrics_freq: int):
         # Discriminator ground truths
         REAL_D = tf.convert_to_tensor(np.ones((self.dataloader.batch_size, *self.D_net.output_shape[1:])))
         FAKE_D = tf.convert_to_tensor(np.zeros((self.dataloader.batch_size, *self.D_net.output_shape[1:])))
 
-        pbar = tqdm(range(iterations))
-        pbar.update(iteration)
-        for curr_iteration in range(iteration, iterations):
+        pbar = tqdm(range(steps))
+        pbar.update(step)
+        for curr_step in range(step, steps):
             real_As, Bs = next(self.dataloader)
             assert isinstance(real_As, tf.Tensor)
             assert isinstance(Bs, tf.Tensor)
 
             ################################################################
             # Save sample image
-            if curr_iteration % sample_freq == 0:
-                with self.dataloader.with_batch_size(sample_n):
-                    img_As, img_Bs = next(self.dataloader)
-                rgb_img = self.G_net.generate_samples(img_As, img_Bs)
-                if rgb_img is not None and type(rgb_img) is np.ndarray:
-                    img_path = self.samples_path.joinpath(f"{str(curr_iteration).zfill(10)}.png")
-                    cv2.imwrite(str(img_path), cv2.cvtColor(rgb_img, cv2.COLOR_RGB2BGR))
+            if curr_step % sample_freq == 0:
+                self.save_samples(curr_step, sample_n)
 
             ################################################################
             #  Train Generator
@@ -216,17 +212,18 @@ class Pix2Pix:
             }
 
             # TensorBoard
-            for key, value in metrics.items():
-                tf.summary.scalar(key, value, step=curr_iteration)
+            if curr_step % metrics_freq == 0:
+                for key, value in metrics.items():
+                    tf.summary.scalar(key, value, step=curr_step)
 
             # tqdm
             pbar.set_description(" ".join([f"[{key}: {value:.3f}]" for key, value in metrics.items()]))
             pbar.update()
 
             # Checkpoint
-            if curr_iteration % checkpoint_freq == 0 or curr_iteration == iterations - 1:
-                self._snap(curr_iteration)
-                self._save_config(curr_iteration)
+            if curr_step % checkpoint_freq == 0 or curr_step == steps - 1:
+                self._snap(curr_step)
+                self._save_config(curr_step)
                 print("\nCheckpoints saved")
 
         pbar.close()
@@ -234,6 +231,14 @@ class Pix2Pix:
         self._save_models()
 
     # Helpers
+    def save_samples(self, i: int, n: int):
+        with self.dataloader.with_batch_size(n):
+            img_As, img_Bs = next(self.dataloader)
+        rgb_img = self.G_net.generate_samples(img_As, img_Bs)
+        if rgb_img is not None and type(rgb_img) is np.ndarray:
+            img_path = self.samples_path.joinpath(f"{str(i).zfill(10)}.png")
+            cv2.imwrite(str(img_path), cv2.cvtColor(rgb_img, cv2.COLOR_RGB2BGR))
+
     def _summary(self, plot: bool = True):
         self.D_net.summary()
         self.G_net.summary()
@@ -242,19 +247,19 @@ class Pix2Pix:
             tf.keras.utils.plot_model(self.D_net, to_file=f"{self.run_path}/D_net.png", show_shapes=True, dpi=64)
             tf.keras.utils.plot_model(self.G_net, to_file=f"{self.run_path}/G_net.png", show_shapes=True, dpi=64)
 
-    @descope
+    @destrat
     def _snap(self, epoch: int):
         self.D_ckpt_manager.save(epoch)
         self.G_ckpt_manager.save(epoch)
 
     def _save_models(self):
         # Tensorflow
-        if self.config[CF.TF]:
+        if self.config[CF.SAVE_TF]:
             self.D_net.save(str(self.model_path.joinpath("D")), save_format="tf")
             self.G_net.save(str(self.model_path.joinpath("G")), save_format="tf")
 
         # TFLite
-        if self.config[CF.TFLITE]:
+        if self.config[CF.SAVE_TFLITE]:
             converter = tf.lite.TFLiteConverter.from_keras_model(self.D_net)
             with self.model_path.joinpath("D.tflite").open("wb") as file:
                 file.write(converter.convert())
@@ -264,7 +269,7 @@ class Pix2Pix:
                 file.write(converter.convert())
 
         # TFLite quantizised
-        if self.config[CF.TFLITE_Q]:
+        if self.config[CF.SAVE_TFLITE_Q]:
             converter = tf.lite.TFLiteConverter.from_keras_model(self.D_net)
             converter.optimizations = [tf.lite.Optimize.DEFAULT]
             with self.model_path.joinpath("Dq.tflite").open("wb") as file:
@@ -277,10 +282,10 @@ class Pix2Pix:
 
     def _save_config(self, iteration: Optional[int] = None):
         if iteration is not None:
-            self.config[CF.ITERATION] = iteration + 1
+            self.config[CF.STEP] = iteration + 1
         self.config.save(self.run_path.joinpath("config.json"))
 
-    @scope
+    @strat
     def _restore(self):
         self.D_ckpt.restore(self.D_ckpt_manager.latest_checkpoint)
         self.G_ckpt.restore(self.G_ckpt_manager.latest_checkpoint)

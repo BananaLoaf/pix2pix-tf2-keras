@@ -49,25 +49,27 @@ if __name__ == '__main__':
                         dest=CF.G_L1_LAMBDA)
     parser.add_argument("-b", "--batch-size", type=int, default=2, help="Batch size (default: %(default)s)",
                         dest=CF.BATCH_SIZE)
-    parser.add_argument("-i", "--iterations", type=int, default=1_000_000, help="Iterations (default: %(default)s)",
-                        dest=CF.ITERATIONS)
+    parser.add_argument("-s", "--steps", type=int, default=1_000_000, help="Steps (default: %(default)s)",
+                        dest=CF.STEPS)
     # Training options
     parser.add_argument("-o", "--output", type=str, default="result", help="Output path for run folder (default: %(default)s)",
                         dest=OUTPUT_PATH)
     parser.add_argument("-sn", "--sample-n", type=int, default=6, help="Amount of samples (default: %(default)s)",
                         dest=CF.SAMPLE_N)
-    parser.add_argument("-sf", "--sample-freq", type=int, default=100, help="Sampling frequency in iterations (default: %(default)s)",
+    parser.add_argument("-sf", "--sample-freq", type=int, default=100, help="Sampling frequency in steps (default: %(default)s)",
                         dest=CF.SAMPLE_FREQ)
-    parser.add_argument("-cf", "--checkpoint-freq", type=int, default=10_000, help="Checkpoint frequency in iterations (default: %(default)s)",
+    parser.add_argument("-cf", "--checkpoint-freq", type=int, default=10_000, help="Checkpoint frequency in steps (default: %(default)s)",
                         dest=CF.CHECKPOINT_FREQ)
+    parser.add_argument("-mf", "--metrics-freq", type=int, default=10, help="TensorBoard metrics saving frequency in steps (default: %(default)s)",
+                        dest=CF.METRICS_FREQ)
 
     # Save options
     parser.add_argument("--tf", action="store_true", default=True, help="Save as tf model",
-                        dest=CF.TF)
+                        dest=CF.SAVE_TF)
     parser.add_argument("--tflite", action="store_true", default=False, help="Save as tflite model",
-                        dest=CF.TFLITE)
+                        dest=CF.SAVE_TFLITE)
     parser.add_argument("--tflite-q", action="store_true", default=False, help="Save as quantizised tflite model",
-                        dest=CF.TFLITE_Q)
+                        dest=CF.SAVE_TFLITE_Q)
 
     args = parser.parse_args()
     config = Config.from_args(args)

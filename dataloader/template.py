@@ -6,12 +6,12 @@ import tensorflow as tf
 
 
 class DataLoader:
-    def __init__(self, dataset: Path, batch_size: int, resolution: int, channels: int):
-        self.dataset = dataset
-        self.batch_size = batch_size
+    def __init__(self, config):
+        self.dataset = config.dataset
+        self.batch_size = config.batch_size
 
-        self.resolution = resolution
-        self.channels = channels
+        self.resolution = config.resolution
+        self.channels = config.in_channels
 
     def __len__(self):
         raise NotImplementedError

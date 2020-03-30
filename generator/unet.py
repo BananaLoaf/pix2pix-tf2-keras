@@ -88,48 +88,48 @@ class UNet(tf.keras.models.Model):
 
 
 class UNet32(UNet):
-    def __init__(self, resolution: int, input_channels: int, output_channels: int, filters: int):
-        super().__init__(resolution=resolution,
-                         input_channels=input_channels,
-                         output_channels=output_channels,
-                         filters=filters, n_blocks=5)
+    def __init__(self, config):
+        super().__init__(resolution=config.resolution,
+                         input_channels=config.in_channels,
+                         output_channels=config.out_channels,
+                         filters=config.filters, n_blocks=5)
 
 
 class UNet64(UNet):
-    def __init__(self, resolution: int, input_channels: int, output_channels: int, filters: int):
-        super().__init__(resolution=resolution,
-                         input_channels=input_channels,
-                         output_channels=output_channels,
-                         filters=filters, n_blocks=6)
+    def __init__(self, config):
+        super().__init__(resolution=config.resolution,
+                         input_channels=config.in_channels,
+                         output_channels=config.out_channels,
+                         filters=config.filters, n_blocks=6)
 
 
 class UNet128(UNet):
-    def __init__(self, resolution: int, input_channels: int, output_channels: int, filters: int):
-        super().__init__(resolution=resolution,
-                         input_channels=input_channels,
-                         output_channels=output_channels,
-                         filters=filters, n_blocks=7)
+    def __init__(self, config):
+        super().__init__(resolution=config.resolution,
+                         input_channels=config.in_channels,
+                         output_channels=config.out_channels,
+                         filters=config.filters, n_blocks=7)
 
 
 class UNet256(UNet):
-    def __init__(self, resolution: int, input_channels: int, output_channels: int, filters: int):
-        super().__init__(resolution=resolution,
-                         input_channels=input_channels,
-                         output_channels=output_channels,
-                         filters=filters, n_blocks=8)
+    def __init__(self, config):
+        super().__init__(resolution=config.resolution,
+                         input_channels=config.in_channels,
+                         output_channels=config.out_channels,
+                         filters=config.filters, n_blocks=8)
 
 
 class UNet512(UNet):
-    def __init__(self, resolution: int, input_channels: int, output_channels: int, filters: int):
-        super().__init__(resolution=resolution,
-                         input_channels=input_channels,
-                         output_channels=output_channels,
-                         filters=filters, n_blocks=9)
+    def __init__(self, config):
+        super().__init__(resolution=config.resolution,
+                         input_channels=config.in_channels,
+                         output_channels=config.out_channels,
+                         filters=config.filters, n_blocks=9)
 
 
 class UNet1024(UNet):
-    def __init__(self, resolution: int, input_channels: int, output_channels: int, filters: int):
-        super().__init__(resolution=resolution,
-                         input_channels=input_channels,
-                         output_channels=output_channels,
-                         filters=filters, n_blocks=10)
+    def __init__(self, config):
+        super().__init__(resolution=config.resolution,
+                         input_channels=config.in_channels,
+                         output_channels=config.out_channels,
+                         filters=config.filters, n_blocks=10)

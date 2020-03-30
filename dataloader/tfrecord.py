@@ -9,8 +9,8 @@ from dataloader.template import DataLoader
 
 
 class TFRecordDataLoader(DataLoader):
-    def __init__(self, dataset: Path, batch_size: int, resolution: int, channels: int):
-        super().__init__(dataset, batch_size, resolution, channels)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
         self.tfrecord = tf.data.TFRecordDataset([str(self.dataset)])
         self._len = sum([1 for _ in self.tfrecord])

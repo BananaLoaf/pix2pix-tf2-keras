@@ -9,6 +9,7 @@ from dataloader import DATALOADERS
 
 
 ALL_DEVICES = [dev.name for dev in tf.config.list_logical_devices()]
+GPU_DEVICES = [dev for dev in set([dev[-1] for dev in filter(lambda dev: 'GPU' in dev, ALL_DEVICES)])]
 DESCRIPTION = "Pix2Pix Tensorflow 2 Keras implementation"
 
 
@@ -64,14 +65,18 @@ class Config:
     tpu_name = {GROUP_NAME: "Device params",
                 ARGS: ["--tpu-name"],
                 KWARGS: {TYPE: str, DEFAULT: None, HELP: "Google Cloud TPU name, if None and flag --use-tpu is set, will try to detect automatically (default: %(default)s)"}}
-    device = {GROUP_NAME: "Device params",
-              EXCLUSIVE_GROUP: [
-                  {ARGS: ["--cpu"],
-                   KWARGS: {TYPE: str, DEFAULT: "/device:CPU:0", CHOICES: list(filter(lambda dev: "CPU" in dev, ALL_DEVICES)), HELP: "CPU (default: %(default)s)"}},
-                  {ARGS: ["--gpu"],
-                   KWARGS: {TYPE: str, HELP: f"Available GPUs: {list(filter(lambda dev: 'GPU' in dev, ALL_DEVICES))}, list devices with , as delimiter"}}
-              ],
-              REQUIRED: False}
+    # device = {GROUP_NAME: "Device params",
+    #           EXCLUSIVE_GROUP: [
+    #               {ARGS: ["--cpu"],
+    #                KWARGS: {TYPE: str, DEFAULT: "/device:CPU:0", CHOICES: list(filter(lambda dev: "CPU" in dev, ALL_DEVICES)), HELP: "CPU (default: %(default)s)"}},
+    #               {ARGS: ["--gpu"],
+    #                KWARGS: {TYPE: str, HELP: f"Available GPUs: {list(filter(lambda dev: 'GPU' in dev, ALL_DEVICES))}, list devices with , as delimiter"}}
+    #           ],
+    #           REQUIRED: False}
+    devices = {GROUP_NAME: "Device params",
+               ARGS: ["--gpu"],
+               KWARGS: {TYPE: str, DEFAULT: None, HELP: f"Available GPUs: {GPU_DEVICES}, list devices with , as delimiter"},
+               REQUIRED: False}
 
     # Optimizer params
     g_lr = {GROUP_NAME: "Optimizer params",

@@ -14,29 +14,10 @@ from etc.discriminator import Discriminator
 
 
 class Pix2Pix:
-    config: Config
-    dataloader: DataLoader
-    writer: tf.summary.SummaryWriter
-    strategy: tf.distribute.Strategy
-
-    run_path: Path
-    samples_path: Path
-    model_path: Path
-
-    D_net: tf.keras.models.Model
-    D_optimizer: tf.keras.optimizers.Adam
-    D_ckpt: tf.train.Checkpoint
-    D_ckpt_manager: tf.train.CheckpointManager
-
-    G_net: tf.keras.models.Model
-    G_optimizer: tf.keras.optimizers.Adam
-    G_ckpt: tf.train.Checkpoint
-    G_ckpt_manager: tf.train.CheckpointManager
-
     def __init__(self, config: Config, run_directory: Path):
         tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
         self.config = config
-        if self.config.xla_jit:
+        if config.xla_jit:
             os.environ["TF_XLA_FLAGS"] = "--tf_xla_auto_jit=2 --tf_xla_cpu_global_jit"
 
         ################################################################
@@ -57,40 +38,41 @@ class Pix2Pix:
 
         ################################################################
         # DataLoader, TensorBoard
-        DataLoader_class = DATALOADERS[self.config.dataloader]
-        self.dataloader = DataLoader_class(config=self.config)
-        self.writer = tf.summary.create_file_writer(str(self.run_path))
+        DataLoader_cls = DATALOADERS[config.dataloader]
+        self.dataloader: DataLoader = DataLoader_cls(config=config)
+        self.writer: tf.summary.SummaryWriter = tf.summary.create_file_writer(str(self.run_path))
         self.writer.set_as_default()
 
         ################################################################
         # Device
-        if self.config.use_tpu:
-            kwargs = {} if self.config.tpu_name is None else {"tpu": self.config.tpu_name}
+        if config.use_tpu:
+            kwargs = {} if config.tpu_name is None else {"tpu": config.tpu_name}
             resolver = tf.distribute.cluster_resolver.TPUClusterResolver(**kwargs)
             tf.config.experimental_connect_to_cluster(resolver)
             tf.tpu.experimental.initialize_tpu_system(resolver)
-            self.strategy = tf.distribute.experimental.TPUStrategy(resolver)
+            self.strategy: tf.distribute.Strategy = tf.distribute.experimental.TPUStrategy(resolver)
 
         else:
-            if "GPU" in self.config.device:
-                self.strategy = tf.distribute.MirroredStrategy(devices=self.config.device.split(","))
-            elif "CPU" in self.config.device:
-                self.strategy = tf.distribute.OneDeviceStrategy(device=self.config.device)
+            if config.devices is not None:
+                self.strategy: tf.distribute.Strategy = tf.distribute.MirroredStrategy(devices=[f"/device:{'XLA_' if config.xla_jit else ''}GPU:{dev}" for dev in config.devices.split(",")])
             else:
-                raise NotImplementedError(f"Wrong device name '{self.config.device}'")
+                self.strategy: tf.distribute.Strategy = tf.distribute.OneDeviceStrategy(device=f"/device:{'XLA_' if config.xla_jit else ''}CPU:0")
 
         ################################################################
         self._init_networks()
 
-    def on_device(func):
+    def with_strategy(func):
         """Run function in a strategy context"""
         def wrapper(self, *args, **kwargs):
             return self.strategy.experimental_run_v2(lambda: func(self, *args, **kwargs))
 
         return wrapper
 
-    def off_device(func):
-        """Descope function within other context"""
+    def merge(func):
+        """
+        Merge args across replicas and run merge_fn in a cross-replica context.
+        https://www.tensorflow.org/api_docs/python/tf/distribute/ReplicaContext
+        """
         def wrapper(*args, **kwargs):
             def descoper(strategy: Optional[tf.distribute.Strategy] = None, *args, **kwargs):
                 if strategy is None:
@@ -99,14 +81,14 @@ class Pix2Pix:
                     with strategy.scope():
                         return func(*args, **kwargs)
 
-            return tf.distribute.get_replica_context().merge_call(lambda strategy: descoper(strategy, *args, **kwargs))
+            return tf.distribute.get_replica_context().merge_call(descoper, *args, **kwargs)
 
         return wrapper
 
-    @on_device
+    @with_strategy
     def _init_networks(self):
         Generator_class = GENERATORS[self.config.generator]
-        self.G_net = Generator_class(config=self.config)
+        self.G_net: tf.keras.models.Model = Generator_class(config=self.config)
 
         self.G_optimizer = tf.keras.optimizers.Adam(learning_rate=self.config.g_lr,
                                                     beta_1=self.config.g_beta1)
@@ -115,9 +97,11 @@ class Pix2Pix:
                                                          max_to_keep=self.config.steps, checkpoint_name="G")
 
         ################################################################
-        self.D_net = Discriminator(input_resolution=self.config.resolution,
-                                   input_channels=self.config.out_channels,
-                                   filters=self.config.filters)
+        self.D_net: tf.keras.models.Model = Discriminator(input_resolution=self.config.resolution,
+                                                          input_channels=self.config.out_channels,
+                                                          filters=self.config.filters)
+        self.REAL_D = tf.ones((self.dataloader.batch_size, *self.D_net.output_shape[1:]))
+        self.FAKE_D = tf.zeros((self.dataloader.batch_size, *self.D_net.output_shape[1:]))
 
         self.D_optimizer = tf.keras.optimizers.Adam(learning_rate=self.config.d_lr,
                                                     beta_1=self.config.d_beta1)
@@ -150,59 +134,55 @@ class Pix2Pix:
         except KeyboardInterrupt:
             print("Stopping...")
 
-    @on_device
-    def _train(self):
-        # Discriminator ground truths
-        REAL_D = tf.convert_to_tensor(np.ones((self.dataloader.batch_size, *self.D_net.output_shape[1:])))
-        FAKE_D = tf.convert_to_tensor(np.zeros((self.dataloader.batch_size, *self.D_net.output_shape[1:])))
+    def train_step(self) -> dict:
+        real_As, Bs = next(self.dataloader)
+        assert isinstance(real_As, tf.Tensor)
+        assert isinstance(Bs, tf.Tensor)
 
+        ################################################################
+        # Train Generator
+        with tf.GradientTape() as tape:
+            fake_As = self.G_net(Bs, training=True)
+            fake_D = self.D_net([fake_As, Bs], training=False)
+
+            G_GAN_loss = tf.reduce_mean(tf.losses.MSE(self.REAL_D, fake_D))
+            G_L1 = tf.reduce_mean(tf.losses.MAE(real_As, fake_As)) * self.config.g_l1_lambda
+
+            grads = tape.gradient(G_GAN_loss + G_L1, self.G_net.trainable_variables)
+        self.G_optimizer.apply_gradients(zip(grads, self.G_net.trainable_variables))
+
+        # Train Discriminator
+        with tf.GradientTape() as tape:
+            real_D_L1 = tf.losses.MSE(self.REAL_D, self.D_net([real_As, Bs], training=True))
+            fake_D_L1 = tf.losses.MSE(self.FAKE_D, self.D_net([fake_As, Bs], training=True))
+            D_L1 = tf.reduce_mean(real_D_L1 + fake_D_L1)
+
+            grads = tape.gradient(D_L1, self.D_net.trainable_variables)
+        self.D_optimizer.apply_gradients(zip(grads, self.D_net.trainable_variables))
+
+        ################################################################
+        return {
+            "D_L1": D_L1,
+            "G_L1": G_L1,
+            "G_GAN_loss": G_GAN_loss
+        }
+
+    @with_strategy
+    def _train(self):
         pbar = tqdm(range(self.config.steps))
         pbar.update(self.config.step)
         for curr_step in range(self.config.step, self.config.steps):
-            real_As, Bs = next(self.dataloader)
-            assert isinstance(real_As, tf.Tensor)
-            assert isinstance(Bs, tf.Tensor)
-
-            ################################################################
             # Save sample image
             if curr_step % self.config.sample_freq == 0:
                 self.save_samples(curr_step)
 
-            ################################################################
-            # Train step
-            # Train Generator
-            with tf.GradientTape() as tape:
-                fake_As = self.G_net(Bs, training=True)
-                fake_D = self.D_net([fake_As, Bs], training=False)
+            # Perform train step
+            metrics = self.train_step()
 
-                G_GAN_loss = tf.reduce_mean(tf.losses.MSE(REAL_D, fake_D))
-                G_L1 = tf.reduce_mean(tf.losses.MAE(real_As, fake_As)) * self.config.g_l1_lambda
-
-                grads = tape.gradient(G_GAN_loss + G_L1, self.G_net.trainable_variables)
-            self.G_optimizer.apply_gradients(zip(grads, self.G_net.trainable_variables))
-
-            # Train Discriminator
-            with tf.GradientTape() as tape:
-                real_D_L1 = tf.losses.MSE(REAL_D, self.D_net([real_As, Bs], training=True))
-                fake_D_L1 = tf.losses.MSE(FAKE_D, self.D_net([fake_As, Bs], training=True))
-                D_L1 = tf.reduce_mean(real_D_L1 + fake_D_L1)
-
-                grads = tape.gradient(D_L1, self.D_net.trainable_variables)
-            self.D_optimizer.apply_gradients(zip(grads, self.D_net.trainable_variables))
-
-            ################################################################
-            metrics = {
-                "D_L1": D_L1,
-                "G_L1": G_L1,
-                "G_GAN_loss": G_GAN_loss
-            }
-
-            # TensorBoard
             if curr_step % self.config.metrics_freq == 0:
                 for key, value in metrics.items():
                     tf.summary.scalar(key, value, step=curr_step)
 
-            # tqdm
             pbar.set_description(" ".join([f"[{key}: {value:.3f}]" for key, value in metrics.items()]))
             pbar.update()
 
@@ -217,7 +197,7 @@ class Pix2Pix:
         self._save_models()
 
     # Helpers
-    def save_samples(self, step: int):
+    def save_samples(self, step: int):  # TODO get samples
         with self.dataloader.with_batch_size(self.config.sample_n):
             img_As, img_Bs = next(self.dataloader)
         rgb_img = self.G_net.generate_samples(img_As, img_Bs)
@@ -233,12 +213,12 @@ class Pix2Pix:
             tf.keras.utils.plot_model(self.D_net, to_file=f"{self.run_path}/D_net.png", show_shapes=True, dpi=64)
             tf.keras.utils.plot_model(self.G_net, to_file=f"{self.run_path}/G_net.png", show_shapes=True, dpi=64)
 
-    @off_device
+    @merge
     def _snap(self, step: int):
         self.D_ckpt_manager.save(step)
         self.G_ckpt_manager.save(step)
 
-    @on_device
+    @with_strategy
     def _restore(self):
         self.D_ckpt.restore(self.D_ckpt_manager.latest_checkpoint)
         self.G_ckpt.restore(self.G_ckpt_manager.latest_checkpoint)

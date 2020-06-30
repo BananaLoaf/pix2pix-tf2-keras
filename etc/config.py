@@ -8,15 +8,14 @@ from generator import GENERATORS, UNet256
 from dataloader import DATALOADERS
 
 
-ALL_DEVICES = [dev.name for dev in tf.config.list_logical_devices()]
-GPU_DEVICES = [dev for dev in set([dev[-1] for dev in filter(lambda dev: 'GPU' in dev, ALL_DEVICES)])]
+GPU_DEVICES = [dev[-1] for dev in [dev.name for dev in tf.config.list_logical_devices("GPU")]]
 DESCRIPTION = "Pix2Pix Tensorflow 2 Keras implementation"
 
 
 ARGS = "ARGS"
 KWARGS = "KWARGS"
 GROUP_NAME = "GROUP_NAME"
-EXCLUSIVE_GROUP = "EXCLUSIVE_GROUP"
+# EXCLUSIVE_GROUP = "EXCLUSIVE_GROUP"
 CONSTANT = "CONSTANT"
 SAVE = "SAVE"
 
@@ -29,6 +28,30 @@ HELP = "help"
 
 
 class Config:
+    """
+    This config implementation allows to easily trace params usage with the help of IDE
+
+    Examples:
+    name = {GROUP_NAME: "Model",                                        # Not required
+            ARGS: ["--name"],                                           # Required
+            KWARGS: {TYPE: str, REQUIRED: True, HELP: "Model name"}},   # Required
+            SAVE: False                                                 # Saving in config.json, (default: True)
+
+    # Does not provide cli param, just exists
+    step = {CONSTANT: 0,
+            SAVE; False}  #
+
+    # Deprecated
+    device = {GROUP_NAME: "Device params",
+              EXCLUSIVE_GROUP: [
+                  {ARGS: ["--cpu"],
+                   KWARGS: {TYPE: str, DEFAULT: "/device:CPU:0", CHOICES: [dev.name for dev in tf.config.list_logical_devices("CPU")], HELP: "CPU (default: %(default)s)"}},
+                  {ARGS: ["--gpu"],
+                   KWARGS: {TYPE: str, HELP: "GPUs"}}
+              ],
+              REQUIRED: False}  # Only used with EXCLUSIVE_GROUP, if not required, one of elements in a group must have DEFAULT value (default: True)
+    """
+
     name = {ARGS: ["--name"],
             KWARGS: {TYPE: str, REQUIRED: True, HELP: "Model name"}}
     plot = {ARGS: ["--plot"],
@@ -61,22 +84,13 @@ class Config:
     # Device params
     use_tpu = {GROUP_NAME: "Device params",
                ARGS: ["--use-tpu"],
-               KWARGS: {ACTION: "store_true", HELP: "Use Google Cloud TPU (default: %(default)s)"}}
+               KWARGS: {ACTION: "store_true", HELP: "Use Google Cloud TPU, if True, --gpu param is ignored (default: %(default)s)"}}
     tpu_name = {GROUP_NAME: "Device params",
                 ARGS: ["--tpu-name"],
                 KWARGS: {TYPE: str, DEFAULT: None, HELP: "Google Cloud TPU name, if None and flag --use-tpu is set, will try to detect automatically (default: %(default)s)"}}
-    # device = {GROUP_NAME: "Device params",
-    #           EXCLUSIVE_GROUP: [
-    #               {ARGS: ["--cpu"],
-    #                KWARGS: {TYPE: str, DEFAULT: "/device:CPU:0", CHOICES: list(filter(lambda dev: "CPU" in dev, ALL_DEVICES)), HELP: "CPU (default: %(default)s)"}},
-    #               {ARGS: ["--gpu"],
-    #                KWARGS: {TYPE: str, HELP: f"Available GPUs: {list(filter(lambda dev: 'GPU' in dev, ALL_DEVICES))}, list devices with , as delimiter"}}
-    #           ],
-    #           REQUIRED: False}
     devices = {GROUP_NAME: "Device params",
                ARGS: ["--gpu"],
-               KWARGS: {TYPE: str, DEFAULT: None, HELP: f"Available GPUs: {GPU_DEVICES}, list devices with , as delimiter"},
-               REQUIRED: False}
+               KWARGS: {TYPE: str, DEFAULT: None, HELP: f"Available GPUs: {GPU_DEVICES}, list devices with , as delimiter"}}
 
     # Optimizer params
     g_lr = {GROUP_NAME: "Optimizer params",
@@ -137,20 +151,22 @@ class Config:
     def __init__(self):
         self._field_scheme = {}
 
+        # Move all schemes in a dict
         for field, scheme in vars(Config).items():
             if not (field.startswith("__") and field.endswith("__")) and isinstance(scheme, dict):
                 setattr(self, field, None)
-                self._field_scheme[field] = scheme
+                self._field_scheme[field] = self.set_defaults(scheme)
+
+    @staticmethod
+    def set_defaults(scheme: dict) -> dict:
+        scheme.setdefault(SAVE, True)
+        return scheme
 
     def get_field_scheme_value(self):
         for field, scheme in self._field_scheme.items():
             try:
                 value = getattr(self, field)
-
-                # Apply defaults
-                scheme.setdefault(SAVE, True)
                 self._field_scheme[field] = scheme
-
                 yield field, scheme, value
 
             except AttributeError:
@@ -160,6 +176,14 @@ class Config:
     def from_cli(cls):
         self = cls()
 
+        ################################################################
+        # Set constants
+        for field, scheme, value in self.get_field_scheme_value():
+            if CONSTANT in scheme.keys():
+                setattr(self, field, scheme[CONSTANT])
+
+        ################################################################
+        # Create parser
         parser = ArgumentParser(description=DESCRIPTION)
         groups = {}
 
@@ -177,23 +201,18 @@ class Config:
                 arg_target = parser
 
             # Create mutually exclusive group inside target
-            if EXCLUSIVE_GROUP in scheme.keys():
-                group = arg_target.add_mutually_exclusive_group(required=scheme[REQUIRED])
-                for sub_arg_params in scheme[EXCLUSIVE_GROUP]:
-                    group.add_argument(*sub_arg_params[ARGS], **sub_arg_params[KWARGS], dest=field)
+            # if EXCLUSIVE_GROUP in scheme.keys():
+            #     group = arg_target.add_mutually_exclusive_group(required=scheme[REQUIRED])
+            #     for sub_arg_params in scheme[EXCLUSIVE_GROUP]:
+            #         group.add_argument(*sub_arg_params[ARGS], **sub_arg_params[KWARGS], dest=field)
+            # else:
+            arg_target.add_argument(*scheme[ARGS], **scheme[KWARGS], dest=field)
 
-            else:
-                arg_target.add_argument(*scheme[ARGS], **scheme[KWARGS], dest=field)
-
-        # Get values from args
+        ################################################################
+        # Parse
         args = parser.parse_args()
         for field, value in vars(args).items():
             setattr(self, field, value)
-
-        # Get constants
-        for field, scheme, value in self.get_field_scheme_value():
-            if CONSTANT in scheme.keys():
-                setattr(self, field, scheme[CONSTANT])
 
         return self
 
@@ -210,10 +229,8 @@ class Config:
                     setattr(self, field, data[field])
                 except KeyError:
                     raise KeyError(f"Config is missing required key '{field}'")
-            else:
-                delattr(self, field)
-                delattr(self.__class__, field)
 
+        self.cleanup()
         return self
 
     def write(self, path: Path):

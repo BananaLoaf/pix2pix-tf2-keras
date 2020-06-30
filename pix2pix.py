@@ -25,21 +25,20 @@ class Pix2Pix:
         self.run_path = run_directory
         self.run_path.mkdir(exist_ok=True, parents=True)
 
-        self.samples_path = Path(f"{self.run_path}/samples")
+        self.samples_path = Path(self.run_path).joinpath("samples")
         self.samples_path.mkdir(exist_ok=True)
 
-        self.checkpoints_path = Path(f"{self.run_path}/checkpoints")
+        self.checkpoints_path = Path(self.run_path).joinpath("checkpoints")
         self.checkpoints_path.joinpath("D").mkdir(exist_ok=True, parents=True)
         self.checkpoints_path.joinpath("G").mkdir(exist_ok=True, parents=True)
 
-        self.model_path = Path(f"{self.run_path}/model")
+        self.model_path = Path(self.run_path).joinpath("model")
         self.model_path.joinpath("D").mkdir(exist_ok=True, parents=True)
         self.model_path.joinpath("G").mkdir(exist_ok=True, parents=True)
 
         ################################################################
         # DataLoader, TensorBoard
-        DataLoader_cls = DATALOADERS[config.dataloader]
-        self.dataloader: DataLoader = DataLoader_cls(config=config)
+        self.dataloader: DataLoader = DATALOADERS[config.dataloader](config=config)
         self.writer: tf.summary.SummaryWriter = tf.summary.create_file_writer(str(self.run_path))
         self.writer.set_as_default()
 
@@ -53,10 +52,19 @@ class Pix2Pix:
             self.strategy: tf.distribute.Strategy = tf.distribute.experimental.TPUStrategy(resolver)
 
         else:
+            all_devices = [dev.name for dev in tf.config.list_logical_devices()]
+
             if config.devices is not None:
-                self.strategy: tf.distribute.Strategy = tf.distribute.MirroredStrategy(devices=[f"/device:{'XLA_' if config.xla_jit else ''}GPU:{dev}" for dev in config.devices.split(",")])
+                devices = [f"/device:{'XLA_' if config.xla_jit else ''}GPU:{dev}" for dev in config.devices.split(",")]
+                for device in devices:
+                    assert device in all_devices, f"Invalid device {device}"
+
+                self.strategy: tf.distribute.Strategy = tf.distribute.MirroredStrategy(devices=devices)
             else:
-                self.strategy: tf.distribute.Strategy = tf.distribute.OneDeviceStrategy(device=f"/device:{'XLA_' if config.xla_jit else ''}CPU:0")
+                device = f"/device:{'XLA_' if config.xla_jit else ''}CPU:0"
+                assert device in all_devices, f"Invalid device {device}"
+
+                self.strategy: tf.distribute.Strategy = tf.distribute.OneDeviceStrategy(device=device)
 
         ################################################################
         self._init_networks()
@@ -74,21 +82,20 @@ class Pix2Pix:
         https://www.tensorflow.org/api_docs/python/tf/distribute/ReplicaContext
         """
         def wrapper(*args, **kwargs):
-            def descoper(strategy: Optional[tf.distribute.Strategy] = None, *args, **kwargs):
+            def descoper(strategy: Optional[tf.distribute.Strategy] = None, *args2, **kwargs2):
                 if strategy is None:
-                    return func(*args, **kwargs)
+                    return func(*args2, **kwargs2)
                 else:
                     with strategy.scope():
-                        return func(*args, **kwargs)
+                        return func(*args2, **kwargs2)
 
-            return tf.distribute.get_replica_context().merge_call(descoper, *args, **kwargs)
+            return tf.distribute.get_replica_context().merge_call(descoper, args, kwargs)
 
         return wrapper
 
     @with_strategy
     def _init_networks(self):
-        Generator_class = GENERATORS[self.config.generator]
-        self.G_net: tf.keras.models.Model = Generator_class(config=self.config)
+        self.G_net: tf.keras.models.Model = GENERATORS[self.config.generator](config=self.config)
 
         self.G_optimizer = tf.keras.optimizers.Adam(learning_rate=self.config.g_lr,
                                                     beta_1=self.config.g_beta1)
@@ -229,7 +236,7 @@ class Pix2Pix:
             self.D_net.save(str(self.model_path.joinpath("D")), save_format="tf")
             self.G_net.save(str(self.model_path.joinpath("G")), save_format="tf")
 
-        # TFLite
+        # TFLite  # TODO check if installed
         if self.config.save_tflite:
             converter = tf.lite.TFLiteConverter.from_keras_model(self.D_net)
             with self.model_path.joinpath("D.tflite").open("wb") as file:

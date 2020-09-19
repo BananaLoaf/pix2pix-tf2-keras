@@ -1,6 +1,6 @@
 from argparse import ArgumentParser
 import json
-from typing import Tuple, Any
+from typing import Tuple, Any, Callable
 
 import tensorflow as tf
 from pathlib import Path
@@ -29,13 +29,14 @@ HELP = "help"
 
 class ConfigBuilder:
     def __init__(self):
-        self._field_scheme = {}
+        for field, scheme, value in self.get_field_scheme_value():
+            setattr(self, field, None)
+            setattr(self.__class__, field, self.set_defaults(scheme))
 
-        # Move all schemes in a protected dict
-        for field, scheme in vars(self.__class__).items():
-            if not (field.startswith("__") and field.endswith("__")) and isinstance(scheme, dict):
-                setattr(self, field, None)
-                self._field_scheme[field] = self.set_defaults(scheme)
+    def get_attrs(self) -> str:
+        for attr, value in vars(self.__class__).items():
+            if not (attr.startswith("__") and attr.endswith("__")) and not isinstance(value, Callable):
+                yield attr
 
     @staticmethod
     def set_defaults(scheme: dict) -> dict:
@@ -45,17 +46,11 @@ class ConfigBuilder:
 
     def get_field_scheme_value(self) -> Tuple[str, dict, Any]:
         """Fetches all available fields, schemes and values"""
-        for field, scheme in self._field_scheme.items():
-            try:
-                value = getattr(self, field)
-                self._field_scheme[field] = scheme
-                yield field, scheme, value
-
-            except AttributeError:
-                pass
+        for attr in self.get_attrs():
+            yield attr, getattr(self.__class__, attr), getattr(self, attr)
 
     @classmethod
-    def from_cli(cls, description: str = ""):
+    def cli(cls, description: str = ""):
         self = cls()
 
         ################################################################
@@ -88,38 +83,44 @@ class ConfigBuilder:
         return self
 
     @classmethod
-    def from_file(cls, path: Path):
+    def load(cls, path: Path):
         self = cls()
+        self._cleanup()
 
         with path.open("r") as file:
             data = json.load(file)
 
         for field, scheme, value in self.get_field_scheme_value():
-            if scheme[SAVE]:
-                try:
-                    setattr(self, field, data[field])
-                except KeyError:
-                    raise KeyError(f"Config is missing required key '{field}'")
+            try:
+                setattr(self, field, data[field])
+            except KeyError:
+                raise KeyError(f"Config is missing required key '{field}'")
 
-        self.cleanup()
         return self
+
+    def save(self, path: Path):
+        self._cleanup()
+        with path.open("w") as file:
+            json.dump(self.to_json(), file, indent=4)
 
     def to_json(self) -> dict:
         data = {}
         for field, scheme, value in self.get_field_scheme_value():
-            if scheme[SAVE]:
-                data[field] = getattr(self, field)
+            data[field] = getattr(self, field)
         return data
 
-    def write(self, path: Path):
-        with path.open("w") as file:
-            json.dump(self.to_json(), file, indent=4)
+    def __repr__(self):
+        return self.to_json()
 
-    def cleanup(self):
+    def _cleanup(self):
+        to_remove = []
         for field, scheme, value in self.get_field_scheme_value():
             if not scheme[SAVE]:
-                delattr(self, field)
-                delattr(self.__class__, field)
+                to_remove.append(field)
+
+        for field in to_remove:
+            delattr(self, field)
+            delattr(self.__class__, field)
 
 
 class Config(ConfigBuilder):
@@ -130,11 +131,11 @@ class Config(ConfigBuilder):
     name = {GROUP_NAME: "Model",                                        # Not required
             ARGS: ["--name"],                                           # Required
             KWARGS: {TYPE: str, REQUIRED: True, HELP: "Model name"}},   # Required
-            SAVE: False                                                 # Saving in config.json, (default: True)
+            SAVE: False                                                 # Saving in config.json, gets wiped on save (default: True)
 
     # Does not provide cli param, just exists
     step = {CONSTANT: 0,
-            SAVE; False}  #
+            SAVE; False}
 
     # Not used
     device = {GROUP_NAME: "Device params",
@@ -146,12 +147,8 @@ class Config(ConfigBuilder):
               ],
               REQUIRED: False}  # Only used with EXCLUSIVE_GROUP, if not required, one of elements in a group must have DEFAULT value (default: True)
     """
-
     name = {ARGS: ["--name"],
             KWARGS: {TYPE: str, REQUIRED: True, HELP: "Model name"}}
-    plot = {ARGS: ["--plot"],
-            KWARGS: {ACTION: "store_true", HELP: "Plot network architectures into png files, requires pydot and graphviz installed (default: %(default)s)"},
-            SAVE: False}
 
     # Model params
     resolution = {GROUP_NAME: "Model params",
@@ -236,8 +233,6 @@ class Config(ConfigBuilder):
 
 
 if __name__ == '__main__':
-    c = Config.from_cli()
-    # c.cleanup()
-    # c.write(Path("config.json"))
-
-    c2 = Config.from_file(Path("config.json"))
+    c = Config.cli()
+    c.save(Path("config.json"))
+    c2 = Config.load(Path("config.json"))

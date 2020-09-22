@@ -12,6 +12,26 @@ class Config(ConfigBuilder):
     name = {ARGS: ["--name"],
             KWARGS: {TYPE: str, REQUIRED: True, HELP: "Model name"}}
 
+
+    # Device params
+    use_tpu = {GROUP_NAME: "Device params",
+               ARGS: ["--use-tpu"],
+               KWARGS: {ACTION: "store_true",
+                        HELP: "Use Google Cloud TPU, if True, --gpu param is ignored (default: %(default)s)"}}
+    tpu_name = {GROUP_NAME: "Device params",
+                ARGS: ["--tpu-name"],
+                KWARGS: {TYPE: str, DEFAULT: None,
+                         HELP: "Google Cloud TPU name, if None and flag --use-tpu is set, will try to detect automatically (default: %(default)s)"}}
+    devices = {GROUP_NAME: "Device params",
+               ARGS: ["--gpu"],
+               KWARGS: {TYPE: str, DEFAULT: None,
+                        HELP: "Available GPUs: {}, list devices with , as delimiter".format(GPU_DEVICES)}}
+    xla_jit = {GROUP_NAME: "Device params",
+               ARGS: ["--xla-jit"],
+               KWARGS: {ACTION: "store_true",
+                        HELP: "XLA Just In Time compilation, https://www.tensorflow.org/xla (default: %(default)s)"}}
+
+
     # Model params
     resolution = {GROUP_NAME: "Model params",
                   ARGS: ["-r", "--res"],
@@ -35,19 +55,34 @@ class Config(ConfigBuilder):
                ARGS: ["-ds", "--dataset"],
                KWARGS: {TYPE: str, REQUIRED: True, HELP: "Path to dataset"}}
 
-    # Device params
-    use_tpu = {GROUP_NAME: "Device params",
-               ARGS: ["--use-tpu"],
-               KWARGS: {ACTION: "store_true", HELP: "Use Google Cloud TPU, if True, --gpu param is ignored (default: %(default)s)"}}
-    tpu_name = {GROUP_NAME: "Device params",
-                ARGS: ["--tpu-name"],
-                KWARGS: {TYPE: str, DEFAULT: None, HELP: "Google Cloud TPU name, if None and flag --use-tpu is set, will try to detect automatically (default: %(default)s)"}}
-    devices = {GROUP_NAME: "Device params",
-               ARGS: ["--gpu"],
-               KWARGS: {TYPE: str, DEFAULT: None, HELP: f"Available GPUs: {GPU_DEVICES}, list devices with , as delimiter"}}
-    xla_jit = {GROUP_NAME: "Device params",
-               ARGS: ["--xla-jit"],
-               KWARGS: {ACTION: "store_true", HELP: "XLA Just In Time compilation, does not fully support UpSampling2D layer in TF 2.1.0 and may never will, https://www.tensorflow.org/xla (default: %(default)s)"}}
+
+    # Training params
+    step = {CONSTANT: 0}
+    steps = {GROUP_NAME: "Training params",
+             ARGS: ["-s", "--steps"],
+             KWARGS: {TYPE: int, DEFAULT: 1_000_000, HELP: "Steps (default: %(default)s)"}}
+    quantization_training = {GROUP_NAME: "Training params",
+                             ARGS: ["-qt", "--quantizised-training"],
+                             KWARGS: {ACTION: "store_true",
+                                      HELP: "Quantization aware training, https://www.tensorflow.org/model_optimization/guide/quantization/training (default: %(default)s)"}}
+    batch_size = {GROUP_NAME: "Training params",
+                  ARGS: ["-b", "--batch-size"],
+                  KWARGS: {TYPE: int, DEFAULT: 2, HELP: "Batch size (default: %(default)s)"}}
+    checkpoint_freq = {GROUP_NAME: "Training params",
+                       ARGS: ["-cf", "--checkpoint-freq"],
+                       KWARGS: {TYPE: int, DEFAULT: 10_000,
+                                HELP: "Checkpoint frequency in steps (default: %(default)s)"}}
+    # Custom
+    g_l1_lambda = {GROUP_NAME: "Training params",
+                   ARGS: ["--G_L1-lambda"],
+                   KWARGS: {TYPE: float, DEFAULT: 50.0, HELP: "G_L1 lambda (default: %(default)s)"}}
+    sample_freq = {GROUP_NAME: "Training params",
+                   ARGS: ["-sf", "--sample-freq"],
+                   KWARGS: {TYPE: int, DEFAULT: 100, HELP: "Sampling frequency in steps (default: %(default)s)"}}
+    sample_n = {GROUP_NAME: "Training params",
+                ARGS: ["-sn", "--sample-n"],
+                KWARGS: {TYPE: int, DEFAULT: 6, HELP: "Amount of samples (default: %(default)s)"}}
+
 
     # Optimizer params
     g_lr = {GROUP_NAME: "Optimizer params",
@@ -64,26 +99,6 @@ class Config(ConfigBuilder):
                ARGS: ["--d-beta1"],
                KWARGS: {TYPE: float, DEFAULT: 0.5, HELP: "Discriminator optimizer beta1 (default: %(default)s)"}}
 
-    # Training params
-    g_l1_lambda = {GROUP_NAME: "Training params",
-                   ARGS: ["--G_L1-lambda"],
-                   KWARGS: {TYPE: float, DEFAULT: 50.0, HELP: "G_L1 lambda (default: %(default)s)"}}
-    batch_size = {GROUP_NAME: "Training params",
-                  ARGS: ["-b", "--batch-size"],
-                  KWARGS: {TYPE: int, DEFAULT: 2, HELP: "Batch size (default: %(default)s)"}}
-    step = {CONSTANT: 0}
-    steps = {GROUP_NAME: "Training params",
-             ARGS: ["-s", "--steps"],
-             KWARGS: {TYPE: int, DEFAULT: 1_000_000, HELP: "Steps (default: %(default)s)"}}
-    sample_freq = {GROUP_NAME: "Training params",
-                   ARGS: ["-sf", "--sample-freq"],
-                   KWARGS: {TYPE: int, DEFAULT: 100, HELP: "Sampling frequency in steps (default: %(default)s)"}}
-    sample_n = {GROUP_NAME: "Training params",
-                ARGS: ["-sn", "--sample-n"],
-                KWARGS: {TYPE: int, DEFAULT: 6, HELP: "Amount of samples (default: %(default)s)"}}
-    checkpoint_freq = {GROUP_NAME: "Training params",
-                       ARGS: ["-cf", "--checkpoint-freq"],
-                       KWARGS: {TYPE: int, DEFAULT: 10_000, HELP: "Checkpoint frequency in steps (default: %(default)s)"}}
 
     # Saving params
     save_tflite = {GROUP_NAME: "Saving params",

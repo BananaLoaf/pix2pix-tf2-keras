@@ -13,3 +13,5 @@ result/
 
 *.jpeg
 *.tfrecord
+
+runs/

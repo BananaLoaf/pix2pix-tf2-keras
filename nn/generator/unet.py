@@ -72,20 +72,6 @@ class UNet(tf.keras.models.Model):
 
         return x
 
-    def generate_samples(self, real_As: tf.Tensor, real_Bs: tf.Tensor) -> np.ndarray:
-        n = real_As.shape[0]
-        fake_As = self(real_Bs).numpy()
-
-        rgb_img = np.hstack([real_Bs[0], real_As[0], fake_As[0]])
-        for row in range(1, n):
-            rgb_img = np.vstack([
-                rgb_img,
-                np.hstack([real_Bs[row], real_As[row], fake_As[row]])
-            ])
-        rgb_img = ((rgb_img + 1) * 127.5).astype(np.uint8)
-
-        return rgb_img
-
 
 class UNet32(UNet):
     def __init__(self, config):

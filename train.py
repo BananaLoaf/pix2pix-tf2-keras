@@ -1,8 +1,7 @@
-from etc.config import Config
+from config import Config
 
 if __name__ == '__main__':
-    config = Config.from_cli()
+    config = Config.cli("Pix2Pix Tensorflow 2 Keras implementation")
 
-    from pix2pix import Pix2Pix
-    gan = Pix2Pix.new_run(config)
-    gan.train()
+    from etc.runner import Runner
+    Runner.train(config)

@@ -1,7 +1,4 @@
-import sys
-import inspect
-
-from generator.unet import *
+from nn.generator.unet import *
 
 
 GENERATORS = {

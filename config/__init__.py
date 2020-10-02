@@ -8,30 +8,7 @@ from metaneural.config import *
 GPU_DEVICES = [dev[-1] for dev in [dev.name for dev in tf.config.list_logical_devices("GPU")]]
 
 
-class Config(ConfigBuilder):
-    name = {ARGS: ["--name"],
-            KWARGS: {TYPE: str, REQUIRED: True, HELP: "Model name"}}
-
-
-    # Device params
-    use_tpu = {GROUP_NAME: "Device params",
-               ARGS: ["--use-tpu"],
-               KWARGS: {ACTION: "store_true",
-                        HELP: "Use Google Cloud TPU, if True, --gpu param is ignored (default: %(default)s)"}}
-    tpu_name = {GROUP_NAME: "Device params",
-                ARGS: ["--tpu-name"],
-                KWARGS: {TYPE: str, DEFAULT: None,
-                         HELP: "Google Cloud TPU name, if None and flag --use-tpu is set, will try to detect automatically (default: %(default)s)"}}
-    devices = {GROUP_NAME: "Device params",
-               ARGS: ["--gpu"],
-               KWARGS: {TYPE: str, DEFAULT: None,
-                        HELP: "Available GPUs: {}, list devices with , as delimiter".format(GPU_DEVICES)}}
-    xla_jit = {GROUP_NAME: "Device params",
-               ARGS: ["--xla-jit"],
-               KWARGS: {ACTION: "store_true",
-                        HELP: "XLA Just In Time compilation, https://www.tensorflow.org/xla (default: %(default)s)"}}
-
-
+class Config(DefaultConfig):
     # Model params
     resolution = {GROUP_NAME: "Model params",
                   ARGS: ["-r", "--res"],
@@ -56,23 +33,7 @@ class Config(ConfigBuilder):
                KWARGS: {TYPE: str, REQUIRED: True, HELP: "Path to dataset"}}
 
 
-    # Training params
-    step = {CONSTANT: 0}
-    steps = {GROUP_NAME: "Training params",
-             ARGS: ["-s", "--steps"],
-             KWARGS: {TYPE: int, DEFAULT: 1_000_000, HELP: "Steps (default: %(default)s)"}}
-    quantization_training = {GROUP_NAME: "Training params",
-                             ARGS: ["-qt", "--quantizised-training"],
-                             KWARGS: {ACTION: "store_true",
-                                      HELP: "Quantization aware training, https://www.tensorflow.org/model_optimization/guide/quantization/training (default: %(default)s)"}}
-    batch_size = {GROUP_NAME: "Training params",
-                  ARGS: ["-b", "--batch-size"],
-                  KWARGS: {TYPE: int, DEFAULT: 2, HELP: "Batch size (default: %(default)s)"}}
-    checkpoint_freq = {GROUP_NAME: "Training params",
-                       ARGS: ["-cf", "--checkpoint-freq"],
-                       KWARGS: {TYPE: int, DEFAULT: 10_000,
-                                HELP: "Checkpoint frequency in steps (default: %(default)s)"}}
-    # Custom
+    # Custom training params
     g_l1_lambda = {GROUP_NAME: "Training params",
                    ARGS: ["--G_L1-lambda"],
                    KWARGS: {TYPE: float, DEFAULT: 50.0, HELP: "G_L1 lambda (default: %(default)s)"}}
@@ -100,10 +61,4 @@ class Config(ConfigBuilder):
                KWARGS: {TYPE: float, DEFAULT: 0.5, HELP: "Discriminator optimizer beta1 (default: %(default)s)"}}
 
 
-    # Saving params
-    save_tflite = {GROUP_NAME: "Saving params",
-                   ARGS: ["--tflite"],
-                   KWARGS: {ACTION: "store_true", DEFAULT: False, HELP: "Save as tflite model"}}
-    save_tflite_q = {GROUP_NAME: "Saving params",
-                     ARGS: ["--tflite-q"],
-                     KWARGS: {ACTION: "store_true", DEFAULT: False, HELP: "Save as quantizised tflite model"}}
+Config.devices[KWARGS][HELP].format(GPU_DEVICES)

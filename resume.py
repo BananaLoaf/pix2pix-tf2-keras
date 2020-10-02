@@ -11,6 +11,6 @@ if __name__ == '__main__':
 
     config = Config.load(Path(args.path).joinpath("config.json"))
 
-    from etc.runner import Runner
-    gan = Runner.resume(config=config, run_directory=Path(args.path))
+    from etc.runner import CustomRunner
+    gan = CustomRunner.resume(config=config, run_directory=Path(args.path))
     gan.train()

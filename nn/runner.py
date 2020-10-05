@@ -8,15 +8,17 @@ from tqdm import tqdm
 
 from metaneural.runner import *
 from nn.generator import *
-from dataloader import *
-from dataloader.template import DataLoader
+from nn.dataloader import Dataloader
 from nn.discriminator import Discriminator
+from nn.config import Config
 
 
 class CustomRunner(Runner):
+    config: Config
+
     ################################################################
-    def _init_dataloader(self) -> Type[DataLoader]:
-        return DATALOADERS[self.config.dataloader](config=self.config)
+    def _init_dataloader(self) -> Dataloader:
+        return Dataloader(batch_size=self.config.batch_size, config=self.config)
 
     @Runner.with_strategy
     def _init_networks(self) -> dict:

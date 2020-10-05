@@ -1,7 +1,6 @@
 import tensorflow as tf
 
 from nn.generator import GENERATORS, UNet256
-from dataloader import DATALOADERS
 from metaneural.config import *
 
 
@@ -15,22 +14,24 @@ class Config(DefaultConfig):
                   KWARGS: {TYPE: int, DEFAULT: 256, HELP: "Input and output image resolution (default: %(default)s)"}}
     in_channels = {GROUP_NAME: "Model params",
                    ARGS: ["--in-channels"],
-                   KWARGS: {TYPE: int, DEFAULT: 3, HELP: "Generator input image channels (default: %(default)s)"}}
+                   KWARGS: {TYPE: int, DEFAULT: 3, CHOICES: [1, 3, 4], HELP: "Generator input image channels (default: %(default)s)"}}
     out_channels = {GROUP_NAME: "Model params",
                     ARGS: ["--out-channels"],
-                    KWARGS: {TYPE: int, DEFAULT: 3, HELP: "Generator output image channels, discriminator input image channels (default: %(default)s)"}}
+                    KWARGS: {TYPE: int, DEFAULT: 3, CHOICES: [1, 3, 4], HELP: "Generator output image channels, discriminator input image channels (default: %(default)s)"}}
     filters = {GROUP_NAME: "Model params",
                ARGS: ["-f", "--filters"],
                KWARGS: {TYPE: int, DEFAULT: 64, HELP: "Generator filters (default: %(default)s)"}}
     generator = {GROUP_NAME: "Model params",
                  ARGS: ["-g", "--generator"],
                  KWARGS: {TYPE: str, DEFAULT: UNet256.__name__, CHOICES: list(GENERATORS.keys()), HELP: "Generator (default: %(default)s)"}}
-    dataloader = {GROUP_NAME: "Model params",
-                  ARGS: ["-dl", "--dataloader"],
-                  KWARGS: {TYPE: str, REQUIRED: True, CHOICES: list(DATALOADERS.keys()), HELP: "DataLoader"}}
-    dataset = {GROUP_NAME: "Model params",
-               ARGS: ["-ds", "--dataset"],
-               KWARGS: {TYPE: str, REQUIRED: True, HELP: "Path to dataset"}}
+
+    # Dataloader params
+    dataset_a = {GROUP_NAME: "Dataloader params",
+                 ARGS: ["-da", "--dataset-a"],
+                 KWARGS: {TYPE: str, REQUIRED: True, HELP: "Path to dataset A, only PNG"}}
+    dataset_b = {GROUP_NAME: "Dataloader params",
+                 ARGS: ["-db", "--dataset-b"],
+                 KWARGS: {TYPE: str, REQUIRED: True, HELP: "Path to dataset B, only PNG"}}
 
 
     # Custom training params

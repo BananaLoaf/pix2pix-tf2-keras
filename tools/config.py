@@ -14,10 +14,10 @@ class Config(DefaultConfig):
                   KWARGS: {TYPE: int, DEFAULT: 256, HELP: "Input and output image resolution (default: %(default)s)"}}
     in_channels = {GROUP_NAME: "Model params",
                    ARGS: ["--in-channels"],
-                   KWARGS: {TYPE: int, DEFAULT: 3, CHOICES: [1, 3, 4], HELP: "Generator input image channels (default: %(default)s)"}}
+                   KWARGS: {TYPE: int, DEFAULT: 3, CHOICES: [1, 3], HELP: "Generator input image channels (default: %(default)s)"}}
     out_channels = {GROUP_NAME: "Model params",
                     ARGS: ["--out-channels"],
-                    KWARGS: {TYPE: int, DEFAULT: 3, CHOICES: [1, 3, 4], HELP: "Generator output image channels, discriminator input image channels (default: %(default)s)"}}
+                    KWARGS: {TYPE: int, DEFAULT: 3, CHOICES: [1, 3], HELP: "Generator output image channels, discriminator input image channels (default: %(default)s)"}}
     filters = {GROUP_NAME: "Model params",
                ARGS: ["-f", "--filters"],
                KWARGS: {TYPE: int, DEFAULT: 64, HELP: "Generator filters (default: %(default)s)"}}
@@ -32,9 +32,6 @@ class Config(DefaultConfig):
     dataset_b = {GROUP_NAME: "Dataloader params",
                  ARGS: ["-db", "--dataset-b"],
                  KWARGS: {TYPE: str, REQUIRED: True, HELP: "Path to dataset B, only PNG"}}
-    validation_split = {GROUP_NAME: "Dataloader params",
-                        ARGS: ["-vs"],
-                        KWARGS: {TYPE: float, DEFAULT: 0.1, HELP: "Validation split"}}
 
 
     # Custom training params

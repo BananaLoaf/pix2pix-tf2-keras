@@ -29,7 +29,8 @@ class CustomRunner(Runner):
 
         ################################################################
         self.D_net: tf.keras.models.Model = Discriminator(input_resolution=self.config.resolution,
-                                                          input_channels=self.config.out_channels,
+                                                          a_channels=self.config.in_channels,
+                                                          b_channels=self.config.out_channels,
                                                           filters=self.config.filters)
         self.D_optimizer = tf.keras.optimizers.Adam(learning_rate=self.config.d_lr,
                                                     beta_1=self.config.d_beta1)
@@ -49,38 +50,40 @@ class CustomRunner(Runner):
                 MODEL: self.G_net,
                 OPTIMIZER: self.G_optimizer,
                 CHECKPOINT: self.G_ckpt,
-                CHECKPOINT_MANAGER: self.G_ckpt_manager
+                CHECKPOINT_MANAGER: self.G_ckpt_manager,
+                QUANTIZATION_TRAINING: True
             },
             "D": {
                 MODEL: self.D_net,
                 OPTIMIZER: self.D_optimizer,
                 CHECKPOINT: self.D_ckpt,
-                CHECKPOINT_MANAGER: self.D_ckpt_manager
+                CHECKPOINT_MANAGER: self.D_ckpt_manager,
+                QUANTIZATION_TRAINING: False
             }
         }
 
     ################################################################
     def train_step(self) -> dict:
-        real_As, Bs = next(self.dataloader)
+        real_As, real_Bs = next(self.dataloader)
         assert isinstance(real_As, tf.Tensor)
-        assert isinstance(Bs, tf.Tensor)
+        assert isinstance(real_Bs, tf.Tensor)
 
         ################################################################
         # Train Generator
         with tf.GradientTape() as tape:
-            fake_As = self.G_net(Bs, training=True)
-            fake_D = self.D_net([fake_As, Bs], training=False)
+            fake_Bs = self.G_net(real_As, training=True)
+            fake_D = self.D_net([real_As, fake_Bs], training=False)
 
             G_GAN_loss = tf.reduce_mean(tf.losses.MSE(self.REAL_D, fake_D))
-            G_L1 = tf.reduce_mean(tf.losses.MAE(real_As, fake_As)) * self.config.g_l1_lambda
+            G_L1 = tf.reduce_mean(tf.losses.MAE(real_Bs, fake_Bs)) * self.config.g_l1_lambda
 
             grads = tape.gradient(G_GAN_loss + G_L1, self.G_net.trainable_variables)
         self.G_optimizer.apply_gradients(zip(grads, self.G_net.trainable_variables))
 
         # Train Discriminator
         with tf.GradientTape() as tape:
-            real_D_L1 = tf.losses.MSE(self.REAL_D, self.D_net([real_As, Bs], training=True))
-            fake_D_L1 = tf.losses.MSE(self.FAKE_D, self.D_net([fake_As, Bs], training=True))
+            real_D_L1 = tf.losses.MSE(self.REAL_D, self.D_net([real_As, real_Bs], training=True))
+            fake_D_L1 = tf.losses.MSE(self.FAKE_D, self.D_net([real_As, fake_Bs], training=True))
             D_L1 = tf.reduce_mean(real_D_L1 + fake_D_L1)
 
             grads = tape.gradient(D_L1, self.D_net.trainable_variables)
@@ -94,7 +97,7 @@ class CustomRunner(Runner):
         }
 
     @Runner.with_strategy
-    def _train(self):
+    def train(self):
         pbar = tqdm(range(self.config.steps))
         pbar.update(self.config.step)
 
@@ -111,9 +114,14 @@ class CustomRunner(Runner):
             if curr_step % self.config.sample_freq == 0:
                 self.save_samples(curr_step)
 
+            if curr_step % self.config.validation_freq == 0:
+                metrics = self.validate()
+                with self.validate_writer.as_default():
+                    for key, value in metrics.items():
+                        tf.summary.scalar(key, value, step=curr_step)
+
             # Perform train step
             metrics = self.train_step()
-
             for key, value in metrics.items():
                 tf.summary.scalar(key, value, step=curr_step)
 
@@ -124,28 +132,37 @@ class CustomRunner(Runner):
         print("Saving models")
         self._save_models()
 
+    def validate(self) -> dict:
+        return {}
+
     ################################################################
     # Sampling
     def generate_samples(self, real_As: tf.Tensor, real_Bs: tf.Tensor) -> np.ndarray:
-        n = real_As.shape[0]
-        fake_As = self.G_net(real_Bs).numpy()
+        fake_Bs = self.G_net(real_As)
 
-        rgb_img = np.hstack([real_Bs[0], real_As[0], fake_As[0]])
-        for row in range(1, n):
-            rgb_img = np.vstack([
-                rgb_img,
-                np.hstack([real_Bs[row], real_As[row], fake_As[row]])
-            ])
-        rgb_img = ((rgb_img + 1) * 127.5).astype(np.uint8)
+        rows = []
+        for i in range(self.config.sample_n):
+            real_A = ((real_As[i].numpy() + 1) * 127.5).astype(np.uint8)
+            real_B = ((real_Bs[i].numpy() + 1) * 127.5).astype(np.uint8)
+            fake_B = ((fake_Bs[i].numpy() + 1) * 127.5).astype(np.uint8)
 
-        return rgb_img
+            if real_A.shape[2] == 1:
+                real_A = cv2.cvtColor(real_A, cv2.COLOR_GRAY2RGB)
+            if real_B.shape[2] == 1:
+                real_B = cv2.cvtColor(real_B, cv2.COLOR_GRAY2RGB)
+            if fake_B.shape[2] == 1:
+                fake_B = cv2.cvtColor(fake_B, cv2.COLOR_GRAY2RGB)
+
+            row = np.hstack([real_A, real_B, fake_B])
+            rows.append(row)
+
+        return np.vstack(rows)
 
     def save_samples(self, step: int):
         with self.dataloader.with_batch_size(self.config.sample_n):
             img_As, img_Bs = next(self.dataloader)
 
         rgb_img = self.generate_samples(img_As, img_Bs)
-        if rgb_img is not None and type(rgb_img) is np.ndarray:
-            self.samples_path.mkdir(exist_ok=True, parents=True)
-            img_path = self.samples_path.joinpath(f"{str(step).zfill(10)}.png")
-            cv2.imwrite(str(img_path), cv2.cvtColor(rgb_img, cv2.COLOR_RGB2BGR))
+        self.samples_path.mkdir(exist_ok=True, parents=True)
+        img_path = self.samples_path.joinpath(f"{str(step).zfill(10)}.png")
+        cv2.imwrite(str(img_path), cv2.cvtColor(rgb_img, cv2.COLOR_RGB2BGR))

@@ -4,9 +4,9 @@ import tensorflow as tf
 
 
 class Discriminator(tf.keras.models.Model):
-    def __init__(self, input_resolution: int, input_channels: int, filters: int):
-        img_A = tf.keras.layers.Input(shape=(input_resolution, input_resolution, input_channels))
-        img_B = tf.keras.layers.Input(shape=(input_resolution, input_resolution, input_channels))
+    def __init__(self, input_resolution: int, a_channels: int, b_channels: int,  filters: int):
+        img_A = tf.keras.layers.Input(shape=(input_resolution, input_resolution, a_channels))
+        img_B = tf.keras.layers.Input(shape=(input_resolution, input_resolution, b_channels))
 
         # Stack images
         combined_imgs = tf.keras.layers.Concatenate(axis=3)([img_A, img_B])

@@ -8,9 +8,9 @@ from tools.config import Config
 
 
 channels2code = {
-    1: cv2.COLOR_BGRA2GRAY,
-    3: cv2.COLOR_BGRA2RGB,
-    4: cv2.COLOR_BGRA2RGBA
+    1: cv2.COLOR_BGR2GRAY,
+    3: cv2.COLOR_BGR2RGB,
+    4: cv2.COLOR_BGR2RGBA
 }
 
 
@@ -25,9 +25,9 @@ class Dataloader(DefaultDataloader):
         self.B = Path(config.dataset_b)
 
         self.img_names = sorted([p.name for p in self.A.glob("*.png")])
-        # for img_name in self.img_names:
-        #     assert self.A.joinpath(img_name).exists(), f"{self.A.joinpath(img_name)} does not exist"
-        #     assert self.B.joinpath(img_name).exists(), f"{self.B.joinpath(img_name)} does not exist"
+        for img_name in self.img_names:
+            assert self.A.joinpath(img_name).exists(), f"{self.A.joinpath(img_name)} does not exist"
+            assert self.B.joinpath(img_name).exists(), f"{self.B.joinpath(img_name)} does not exist"
 
         self.train_imgs = self.img_names[:-int(len(self.img_names) * config.validation_split)]
         self.valid_imgs = self.img_names[-int(len(self.img_names) * config.validation_split):]
@@ -37,8 +37,8 @@ class Dataloader(DefaultDataloader):
         img_Bs = np.zeros((self.batch_size, self.resolution, self.resolution, self.out_channels))
 
         for i, train_img_name in enumerate(np.random.permutation(self.train_imgs)[:self.batch_size]):
-            img_A = cv2.imread(str(self.A.joinpath(train_img_name)), cv2.IMREAD_UNCHANGED)
-            img_B = cv2.imread(str(self.B.joinpath(train_img_name)), cv2.IMREAD_UNCHANGED)
+            img_A = cv2.imread(str(self.A.joinpath(train_img_name)), cv2.IMREAD_COLOR)
+            img_B = cv2.imread(str(self.B.joinpath(train_img_name)), cv2.IMREAD_COLOR)
 
             img_A = cv2.cvtColor(img_A, channels2code[self.in_channels])
             img_B = cv2.cvtColor(img_B, channels2code[self.out_channels])
@@ -49,9 +49,12 @@ class Dataloader(DefaultDataloader):
             if len(img_A.shape) == 2:
                 img_A = np.reshape(img_A, img_A.shape + (1,))
             if len(img_B.shape) == 2:
-                img_B = np.reshape(img_B, img_B.shape + (1, ))
+                img_B = np.reshape(img_B, img_B.shape + (1,))
 
             img_As[i] = img_A
             img_Bs[i] = img_B
+
+        img_As = img_As / 127.5 - 1
+        img_Bs = img_Bs / 127.5 - 1
 
         return tf.convert_to_tensor(img_As), tf.convert_to_tensor(img_Bs)

@@ -2,7 +2,7 @@ from argparse import ArgumentParser
 
 from pathlib import Path
 
-from nn.config import Config
+from tools.config import Config
 
 if __name__ == '__main__':
     parser = ArgumentParser(description="Pix2Pix tensorflow 2 keras implementation")
@@ -11,6 +11,6 @@ if __name__ == '__main__':
 
     config = Config.load(Path(args.path).joinpath("config.json"))
 
-    from nn.runner import CustomRunner
+    from tools.runner import CustomRunner
     gan = CustomRunner.resume(config=config, run_directory=Path(args.path))
     gan.train()

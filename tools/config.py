@@ -32,6 +32,9 @@ class Config(DefaultConfig):
     dataset_b = {GROUP_NAME: "Dataloader params",
                  ARGS: ["-db", "--dataset-b"],
                  KWARGS: {TYPE: str, REQUIRED: True, HELP: "Path to dataset B, only PNG"}}
+    validation_split = {GROUP_NAME: "Dataloader params",
+                        ARGS: ["-vs"],
+                        KWARGS: {TYPE: float, DEFAULT: 0.1, HELP: "Validation split"}}
 
 
     # Custom training params

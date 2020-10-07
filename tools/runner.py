@@ -1,27 +1,22 @@
-import os
-import datetime
-from typing import Optional, Tuple, Type
-
-from pathlib import Path
 import cv2
 from tqdm import tqdm
 
 from metaneural.runner import *
 from nn.generator import *
-from nn.dataloader import Dataloader
+from tools.dataloader import Dataloader
 from nn.discriminator import Discriminator
-from nn.config import Config
+from tools.config import Config
 
 
 class CustomRunner(Runner):
     config: Config
 
     ################################################################
-    def _init_dataloader(self) -> Dataloader:
+    def init_dataloader(self) -> Dataloader:
         return Dataloader(batch_size=self.config.batch_size, config=self.config)
 
     @Runner.with_strategy
-    def _init_networks(self) -> dict:
+    def init_networks(self) -> dict:
         self.G_net: tf.keras.models.Model = GENERATORS[self.config.generator](config=self.config)
         self.G_optimizer = tf.keras.optimizers.Adam(learning_rate=self.config.g_lr,
                                                     beta_1=self.config.g_beta1)

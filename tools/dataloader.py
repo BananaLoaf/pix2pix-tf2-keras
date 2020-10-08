@@ -10,13 +10,11 @@ from tools.config import Config
 channels2code = {
     1: cv2.COLOR_BGR2GRAY,
     3: cv2.COLOR_BGR2RGB,
-    4: cv2.COLOR_BGR2RGBA
 }
 
 
 class Dataloader(DefaultDataloader):
-    def __init__(self, batch_size: int, config: Config):
-        super().__init__(batch_size)
+    def __init__(self, config: Config):
         self.resolution = config.resolution
         self.in_channels = config.in_channels
         self.out_channels = config.out_channels
@@ -32,13 +30,44 @@ class Dataloader(DefaultDataloader):
         self.train_imgs = self.img_names[:-int(len(self.img_names) * config.validation_split)]
         self.valid_imgs = self.img_names[-int(len(self.img_names) * config.validation_split):]
 
-    def __next__(self):
-        img_As = np.zeros((self.batch_size, self.resolution, self.resolution, self.in_channels))
-        img_Bs = np.zeros((self.batch_size, self.resolution, self.resolution, self.out_channels))
+        self.ti = 0
+        self.vi = 0
 
-        for i, train_img_name in enumerate(np.random.permutation(self.train_imgs)[:self.batch_size]):
-            img_A = cv2.imread(str(self.A.joinpath(train_img_name)), cv2.IMREAD_COLOR)
-            img_B = cv2.imread(str(self.B.joinpath(train_img_name)), cv2.IMREAD_COLOR)
+    @property
+    def train_split_size(self) -> int:
+        return len(self.train_imgs)
+
+    @property
+    def validation_split_size(self) -> int:
+        return len(self.valid_imgs)
+
+    def inc(self, value: int, max_val: int):
+        if value == max_val:
+            value = 0
+        else:
+            value += 1
+        return value
+
+    def next(self, batch_size: int, shuffle: bool = True, validate: bool = False):
+        if validate:
+            src_imgs = self.valid_imgs
+            i = self.vi
+        else:
+            src_imgs = self.train_imgs
+            i = self.ti
+
+        if shuffle:
+            src_imgs = np.random.permutation(src_imgs)
+
+        ################################################################
+        img_As = np.zeros((batch_size, self.resolution, self.resolution, self.in_channels))
+        img_Bs = np.zeros((batch_size, self.resolution, self.resolution, self.out_channels))
+
+        for bi in range(batch_size):
+            img_name = src_imgs[i]
+
+            img_A = cv2.imread(str(self.A.joinpath(img_name)), cv2.IMREAD_COLOR)
+            img_B = cv2.imread(str(self.B.joinpath(img_name)), cv2.IMREAD_COLOR)
 
             img_A = cv2.cvtColor(img_A, channels2code[self.in_channels])
             img_B = cv2.cvtColor(img_B, channels2code[self.out_channels])
@@ -51,10 +80,15 @@ class Dataloader(DefaultDataloader):
             if len(img_B.shape) == 2:
                 img_B = np.reshape(img_B, img_B.shape + (1,))
 
-            img_As[i] = img_A
-            img_Bs[i] = img_B
+            img_As[bi] = img_A
+            img_Bs[bi] = img_B
 
-        img_As = img_As / 127.5 - 1
-        img_Bs = img_Bs / 127.5 - 1
+            i = self.inc(i, len(src_imgs) - 1)
 
-        return tf.convert_to_tensor(img_As), tf.convert_to_tensor(img_Bs)
+        ################################################################
+        if validate:
+            self.vi = i
+        else:
+            self.ti = i
+
+        return tf.convert_to_tensor(img_As / 127.5 - 1), tf.convert_to_tensor(img_Bs / 127.5 - 1)

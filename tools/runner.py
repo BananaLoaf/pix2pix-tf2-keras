@@ -13,10 +13,10 @@ class CustomRunner(Runner):
 
     ################################################################
     def init_dataloader(self) -> Dataloader:
-        return Dataloader(batch_size=self.config.batch_size, config=self.config)
+        return Dataloader(config=self.config)
 
     @Runner.with_strategy
-    def init_networks(self) -> dict:
+    def init_networks(self) -> Tuple[RegistryEntry, ...]:
         self.G_net: tf.keras.models.Model = GENERATORS[self.config.generator](config=self.config)
         self.G_optimizer = tf.keras.optimizers.Adam(learning_rate=self.config.g_lr,
                                                     beta_1=self.config.g_beta1)
@@ -41,30 +41,32 @@ class CustomRunner(Runner):
         self.D_ckpt_manager = tf.train.CheckpointManager(self.D_ckpt, directory=D_checkpoint_path,
                                                          max_to_keep=self.config.steps, checkpoint_name=D_checkpoint_path.name)
 
-        self.REAL_D = tf.ones((self.dataloader.batch_size, *self.D_net.output_shape[1:]))
-        self.FAKE_D = tf.zeros((self.dataloader.batch_size, *self.D_net.output_shape[1:]))
+        self.REAL_D = tf.ones((self.config.batch_size, *self.D_net.output_shape[1:]))
+        self.FAKE_D = tf.zeros((self.config.batch_size, *self.D_net.output_shape[1:]))
 
         ################################################################
-        return {
-            "G": {
-                MODEL: self.G_net,
-                OPTIMIZER: self.G_optimizer,
-                CHECKPOINT: self.G_ckpt,
-                CHECKPOINT_MANAGER: self.G_ckpt_manager,
-                QUANTIZATION_TRAINING: True
-            },
-            "D": {
-                MODEL: self.D_net,
-                OPTIMIZER: self.D_optimizer,
-                CHECKPOINT: self.D_ckpt,
-                CHECKPOINT_MANAGER: self.D_ckpt_manager,
-                QUANTIZATION_TRAINING: False
-            }
-        }
+        return (
+            RegistryEntry(
+                name="G",
+                q_aware_training=True,
+                model=self.G_net,
+                optimizer=self.G_optimizer,
+                checkpoint=self.G_ckpt,
+                checkpoint_manager=self.G_ckpt_manager
+            ),
+            RegistryEntry(
+                name="D",
+                q_aware_training=False,
+                model=self.D_net,
+                optimizer=self.D_optimizer,
+                checkpoint=self.D_ckpt,
+                checkpoint_manager=self.D_ckpt_manager
+            )
+        )
 
     ################################################################
     def train_step(self) -> dict:
-        real_As, real_Bs = next(self.dataloader)
+        real_As, real_Bs = self.dataloader.next(batch_size=self.config.batch_size)
         assert isinstance(real_As, tf.Tensor)
         assert isinstance(real_Bs, tf.Tensor)
 
@@ -106,15 +108,16 @@ class CustomRunner(Runner):
 
             # Checkpoint
             if curr_step % self.config.checkpoint_freq == 0:
+                print("\nSaving checkpoints")
                 self._snap(curr_step)
                 self._save_config()
-                print("\nCheckpoints saved")
 
             # Save sample image
             if curr_step % self.config.sample_freq == 0:
                 self.save_samples(curr_step)
 
             if curr_step % self.config.validation_freq == 0:
+                print("\nValidating")
                 metrics = self.validate()
                 with self.validate_writer.as_default():
                     for key, value in metrics.items():
@@ -133,7 +136,29 @@ class CustomRunner(Runner):
         self._save_models()
 
     def validate(self) -> dict:
-        return {}
+        REAL_D = tf.ones((self.dataloader.validation_split_size, *self.D_net.output_shape[1:]))
+        FAKE_D = tf.zeros((self.dataloader.validation_split_size, *self.D_net.output_shape[1:]))
+
+        real_As, real_Bs = self.dataloader.next(batch_size=self.dataloader.validation_split_size, shuffle=False, validate=True)
+        assert isinstance(real_As, tf.Tensor)
+        assert isinstance(real_Bs, tf.Tensor)
+
+        fake_Bs = self.G_net(real_As, training=False)
+        fake_D = self.D_net([real_As, fake_Bs], training=False)
+
+        G_GAN_loss = tf.reduce_mean(tf.losses.MSE(REAL_D, fake_D))
+        G_L1 = tf.reduce_mean(tf.losses.MAE(real_Bs, fake_Bs)) * self.config.g_l1_lambda
+
+        real_D_L1 = tf.losses.MSE(REAL_D, self.D_net([real_As, real_Bs], training=True))
+        fake_D_L1 = tf.losses.MSE(FAKE_D, self.D_net([real_As, fake_Bs], training=True))
+        D_L1 = tf.reduce_mean(real_D_L1 + fake_D_L1)
+
+        ################################################################
+        return {
+            "D_L1": D_L1,
+            "G_L1": G_L1,
+            "G_GAN_loss": G_GAN_loss
+        }
 
     ################################################################
     # Sampling
@@ -159,8 +184,9 @@ class CustomRunner(Runner):
         return np.vstack(rows)
 
     def save_samples(self, step: int):
-        with self.dataloader.with_batch_size(self.config.sample_n):
-            img_As, img_Bs = next(self.dataloader)
+        img_As, img_Bs = self.dataloader.next(batch_size=self.config.sample_n)
+        assert isinstance(img_As, tf.Tensor)
+        assert isinstance(img_Bs, tf.Tensor)
 
         rgb_img = self.generate_samples(img_As, img_Bs)
         self.samples_path.mkdir(exist_ok=True, parents=True)

@@ -4,14 +4,49 @@ import tensorflow as tf
 import numpy as np
 
 
+class MinMaxNormalizationLayer(tf.keras.layers.Layer):
+    def __init__(self, min: float, max: float, newmin: float, newmax: float, round: bool = False, *args, **kwargs):
+        super(MinMaxNormalizationLayer, self).__init__(*args, **kwargs)
+        self.min = min
+        self.max = max
+        self.newmin = newmin
+        self.newmax = newmax
+
+        self.round = round
+
+    def call(self, input, **kwargs):
+        res = (input - self.min)/(self.max - self.min) * (self.newmax - self.newmin) + self.newmin
+
+        if self.round:
+            res = tf.math.round(res)
+
+        return res
+
+
+class OutputLayer(tf.keras.layers.Layer):
+    def __init__(self, *args, **kwargs):
+        super(OutputLayer, self).__init__(*args, **kwargs)
+
+    def call(self, input, **kwargs):
+        kwargs.setdefault("training", False)
+
+        if kwargs["training"]:
+            return input
+
+        else:
+            return MinMaxNormalizationLayer(min=-1., max=1., newmin=0, newmax=255, round=True)(input)
+
+
 class UNet(tf.keras.models.Model):
     def __init__(self, resolution: int, input_channels: int, output_channels: int, filters: int, n_blocks: int):
         self.filters = filters
         self.n_blocks = n_blocks
 
         input_layer = tf.keras.layers.Input(shape=(resolution, resolution, input_channels))
-        layers = self.encoder(input=input_layer)
-        output_layer = self.decoder(layers, channels=output_channels)
+        norm_input = MinMaxNormalizationLayer(min=0., max=255., newmin=-1., newmax=1.)(input_layer)
+        layers = self.encoder(input=norm_input)
+        decoder_layer = self.decoder(layers, channels=output_channels)
+        output_layer = OutputLayer()(decoder_layer)
 
         super().__init__(input_layer, output_layer)
 

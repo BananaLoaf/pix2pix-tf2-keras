@@ -74,7 +74,7 @@ class CustomRunner(Runner):
         # Train Generator
         with tf.GradientTape() as tape:
             fake_Bs = self.G_net(real_As, training=True)
-            fake_D = self.D_net([real_As, fake_Bs], training=False)
+            fake_D = self.D_net([real_As, fake_Bs], training=True)
 
             G_GAN_loss = tf.reduce_mean(tf.losses.MSE(self.REAL_D, fake_D))
             G_L1 = tf.reduce_mean(tf.losses.MAE(real_Bs, fake_Bs)) * self.config.g_l1_lambda
@@ -114,7 +114,7 @@ class CustomRunner(Runner):
 
             # Save sample image
             if curr_step % self.config.sample_freq == 0:
-                self.save_samples(curr_step)
+                self.sample(curr_step)
 
             if curr_step % self.config.validation_freq == 0:
                 print("\nValidating")
@@ -143,8 +143,8 @@ class CustomRunner(Runner):
         assert isinstance(real_As, tf.Tensor)
         assert isinstance(real_Bs, tf.Tensor)
 
-        fake_Bs = self.G_net(real_As, training=False)
-        fake_D = self.D_net([real_As, fake_Bs], training=False)
+        fake_Bs = self.G_net(real_As, training=True)
+        fake_D = self.D_net([real_As, fake_Bs], training=True)
 
         G_GAN_loss = tf.reduce_mean(tf.losses.MSE(REAL_D, fake_D))
         G_L1 = tf.reduce_mean(tf.losses.MAE(real_Bs, fake_Bs)) * self.config.g_l1_lambda
@@ -163,13 +163,17 @@ class CustomRunner(Runner):
     ################################################################
     # Sampling
     def generate_samples(self, real_As: tf.Tensor, real_Bs: tf.Tensor) -> np.ndarray:
-        fake_Bs = self.G_net(real_As)
+        fake_Bs = self.G_net(real_As, training=False)
+
+        real_As = tf.cast(real_As, tf.uint8)
+        real_Bs = tf.cast(real_Bs, tf.uint8)
+        fake_Bs = tf.cast(fake_Bs, tf.uint8)
 
         rows = []
-        for i in range(self.config.sample_n):
-            real_A = ((real_As[i].numpy() + 1) * 127.5).astype(np.uint8)
-            real_B = ((real_Bs[i].numpy() + 1) * 127.5).astype(np.uint8)
-            fake_B = ((fake_Bs[i].numpy() + 1) * 127.5).astype(np.uint8)
+        for i in range(real_As.shape[0]):
+            real_A = real_As[i].numpy()
+            real_B = real_Bs[i].numpy()
+            fake_B = fake_Bs[i].numpy()
 
             if real_A.shape[2] == 1:
                 real_A = cv2.cvtColor(real_A, cv2.COLOR_GRAY2RGB)
@@ -183,8 +187,8 @@ class CustomRunner(Runner):
 
         return np.vstack(rows)
 
-    def save_samples(self, step: int):
-        img_As, img_Bs = self.dataloader.next(batch_size=self.config.sample_n)
+    def sample(self, step: int):
+        img_As, img_Bs = self.dataloader.next(batch_size=10)
         assert isinstance(img_As, tf.Tensor)
         assert isinstance(img_Bs, tf.Tensor)
 

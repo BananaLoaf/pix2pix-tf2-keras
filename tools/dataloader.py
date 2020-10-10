@@ -91,4 +91,4 @@ class Dataloader(DefaultDataloader):
         else:
             self.ti = i
 
-        return tf.convert_to_tensor(img_As / 127.5 - 1), tf.convert_to_tensor(img_Bs / 127.5 - 1)
+        return tf.convert_to_tensor(img_As), tf.convert_to_tensor(img_Bs)

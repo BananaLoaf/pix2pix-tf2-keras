@@ -8,6 +8,9 @@ from nn.discriminator import Discriminator
 from tools.config import Config
 
 
+SAMPLE_N = 10
+
+
 class CustomRunner(Runner):
     config: Config
 
@@ -21,12 +24,6 @@ class CustomRunner(Runner):
         self.G_optimizer = tf.keras.optimizers.Adam(learning_rate=self.config.g_lr,
                                                     beta_1=self.config.g_beta1)
 
-        G_checkpoint_path = self.checkpoints_path.joinpath("G")
-        G_checkpoint_path.mkdir(exist_ok=True, parents=True)
-        self.G_ckpt = tf.train.Checkpoint(optimizer=self.G_optimizer, model=self.G_net)
-        self.G_ckpt_manager = tf.train.CheckpointManager(self.G_ckpt, directory=G_checkpoint_path,
-                                                         max_to_keep=self.config.steps, checkpoint_name=G_checkpoint_path.name)
-
         ################################################################
         self.D_net: tf.keras.models.Model = Discriminator(input_resolution=self.config.resolution,
                                                           a_channels=self.config.in_channels,
@@ -35,12 +32,7 @@ class CustomRunner(Runner):
         self.D_optimizer = tf.keras.optimizers.Adam(learning_rate=self.config.d_lr,
                                                     beta_1=self.config.d_beta1)
 
-        D_checkpoint_path = self.checkpoints_path.joinpath("D")
-        D_checkpoint_path.mkdir(exist_ok=True, parents=True)
-        self.D_ckpt = tf.train.Checkpoint(optimizer=self.D_optimizer, model=self.D_net)
-        self.D_ckpt_manager = tf.train.CheckpointManager(self.D_ckpt, directory=D_checkpoint_path,
-                                                         max_to_keep=self.config.steps, checkpoint_name=D_checkpoint_path.name)
-
+        ################################################################
         self.REAL_D = tf.ones((self.config.batch_size, *self.D_net.output_shape[1:]))
         self.FAKE_D = tf.zeros((self.config.batch_size, *self.D_net.output_shape[1:]))
 
@@ -48,19 +40,15 @@ class CustomRunner(Runner):
         return (
             RegistryEntry(
                 name="G",
-                q_aware_training=True,
+                quant_aware_train=True,
                 model=self.G_net,
-                optimizer=self.G_optimizer,
-                checkpoint=self.G_ckpt,
-                checkpoint_manager=self.G_ckpt_manager
+                optimizer=self.G_optimizer
             ),
             RegistryEntry(
                 name="D",
-                q_aware_training=False,
+                quant_aware_train=False,
                 model=self.D_net,
-                optimizer=self.D_optimizer,
-                checkpoint=self.D_ckpt,
-                checkpoint_manager=self.D_ckpt_manager
+                optimizer=self.D_optimizer
             )
         )
 
@@ -170,7 +158,7 @@ class CustomRunner(Runner):
         fake_Bs = tf.cast(fake_Bs, tf.uint8)
 
         rows = []
-        for i in range(real_As.shape[0]):
+        for i in range(SAMPLE_N):
             real_A = real_As[i].numpy()
             real_B = real_Bs[i].numpy()
             fake_B = fake_Bs[i].numpy()
@@ -188,11 +176,10 @@ class CustomRunner(Runner):
         return np.vstack(rows)
 
     def sample(self, step: int):
-        img_As, img_Bs = self.dataloader.next(batch_size=10)
+        img_As, img_Bs = self.dataloader.next(batch_size=SAMPLE_N)
         assert isinstance(img_As, tf.Tensor)
         assert isinstance(img_Bs, tf.Tensor)
 
         rgb_img = self.generate_samples(img_As, img_Bs)
-        self.samples_path.mkdir(exist_ok=True, parents=True)
         img_path = self.samples_path.joinpath(f"{str(step).zfill(10)}.png")
         cv2.imwrite(str(img_path), cv2.cvtColor(rgb_img, cv2.COLOR_RGB2BGR))

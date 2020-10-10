@@ -36,14 +36,8 @@ class Config(DefaultConfig):
 
     # Custom training params
     g_l1_lambda = {GROUP_NAME: "Training params",
-                   ARGS: ["--G_L1-lambda"],
+                   ARGS: ["--G-L1-lambda"],
                    KWARGS: {TYPE: float, DEFAULT: 50.0, HELP: "G_L1 lambda (default: %(default)s)"}}
-    sample_freq = {GROUP_NAME: "Training params",
-                   ARGS: ["-sf", "--sample-freq"],
-                   KWARGS: {TYPE: int, DEFAULT: 100, HELP: "Sampling frequency in steps (default: %(default)s)"}}
-    sample_n = {GROUP_NAME: "Training params",
-                ARGS: ["-sn", "--sample-n"],
-                KWARGS: {TYPE: int, DEFAULT: 6, HELP: "Amount of samples (default: %(default)s)"}}
 
 
     # Optimizer params

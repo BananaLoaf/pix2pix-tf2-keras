@@ -3,7 +3,6 @@ import numpy as np
 import cv2
 import tensorflow as tf
 
-from metaneural.dataloader import DefaultDataloader
 from tools.config import Config
 
 
@@ -13,7 +12,7 @@ channels2code = {
 }
 
 
-class Dataloader(DefaultDataloader):
+class Dataloader:
     def __init__(self, config: Config):
         self.resolution = config.resolution
         self.in_channels = config.in_channels

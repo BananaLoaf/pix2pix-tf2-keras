@@ -40,13 +40,13 @@ class CustomRunner(Runner):
         return (
             RegistryEntry(
                 name="G",
-                quant_aware_train=True,
+                q_aware_train=True,
                 model=self.G_net,
                 optimizer=self.G_optimizer
             ),
             RegistryEntry(
                 name="D",
-                quant_aware_train=False,
+                q_aware_train=False,
                 model=self.D_net,
                 optimizer=self.D_optimizer
             )

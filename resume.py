@@ -1,15 +1,9 @@
-from argparse import ArgumentParser
-
 from pathlib import Path
 
-from tools.config import Config
+from tools.config import Config, ResumeConfig
+from tools.runner import CustomRunner
 
 if __name__ == '__main__':
-    parser = ArgumentParser(description="Pix2Pix tensorflow 2 keras implementation")
-    parser.add_argument("path", type=str, help="Path to run directory")
-    args = parser.parse_args()
-
-    config = Config.load(Path(args.path).joinpath("config.json"))
-
-    from tools.runner import CustomRunner
-    CustomRunner.resume(config=config, run_directory=Path(args.path))
+    resume_config = ResumeConfig.cli("Pix2Pix Tensorflow 2 Keras implementation")
+    config = Config.load(Path(resume_config.path).joinpath("config.json"))
+    CustomRunner.resume(config=config, run_directory=Path(resume_config.path))

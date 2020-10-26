@@ -1,7 +1,6 @@
-from typing import List
+from typing import List, Optional
 
 import tensorflow as tf
-import numpy as np
 
 
 class MinMaxNormalizationLayer(tf.keras.layers.Layer):
@@ -23,18 +22,27 @@ class MinMaxNormalizationLayer(tf.keras.layers.Layer):
         return res
 
 
-class OutputLayer(tf.keras.layers.Layer):
-    def __init__(self, *args, **kwargs):
-        super(OutputLayer, self).__init__(*args, **kwargs)
+class SwitchLayer(tf.keras.layers.Layer):
+    def __init__(self, run: Optional[tf.keras.layers.Layer] = None, train: Optional[tf.keras.layers.Layer] = None, *args, **kwargs):
+        super(SwitchLayer, self).__init__(*args, **kwargs)
+
+        self.run = run
+        self.train = train
 
     def call(self, input, **kwargs):
         kwargs.setdefault("training", False)
 
         if kwargs["training"]:
-            return input
+            if self.train is None:
+                return input
+            else:
+                return self.train(input)
 
         else:
-            return MinMaxNormalizationLayer(min=-1., max=1., newmin=0, newmax=255, round=True)(input)
+            if self.run is None:
+                return input
+            else:
+                return self.run(input)
 
 
 class UNet(tf.keras.models.Model):
@@ -43,10 +51,21 @@ class UNet(tf.keras.models.Model):
         self.n_blocks = n_blocks
 
         input_layer = tf.keras.layers.Input(shape=(resolution, resolution, input_channels))
-        norm_input = MinMaxNormalizationLayer(min=0., max=255., newmin=-1., newmax=1.)(input_layer)
-        layers = self.encoder(input=norm_input)
+
+        # If not training, take proper image and normalize it
+        # If training, image should be already normalized
+        processed_input_layer = SwitchLayer(
+            run=MinMaxNormalizationLayer(min=0., max=255., newmin=-1., newmax=1.)
+        )(input_layer)
+
+        layers = self.encoder(input=processed_input_layer)
         decoder_layer = self.decoder(layers, channels=output_channels)
-        output_layer = OutputLayer()(decoder_layer)
+
+        # If not training, make a proper image
+        # If training, leave image normalized
+        output_layer = SwitchLayer(
+            run=MinMaxNormalizationLayer(min=-1., max=1., newmin=0., newmax=255., round=True)
+        )(decoder_layer)
 
         super().__init__(input_layer, output_layer)
 

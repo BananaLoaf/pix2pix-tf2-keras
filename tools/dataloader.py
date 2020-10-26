@@ -47,14 +47,23 @@ class Dataloader:
             value += 1
         return value
 
-    def next(self, batch_size: int, shuffle: bool = True, validate: bool = False):
+    def next(self, batch_size: int, shuffle: bool = True, validate: bool = False, reset_i: bool = False):
+        # Which slice
         if validate:
             src_imgs = self.valid_imgs
-            i = self.vi
         else:
             src_imgs = self.train_imgs
-            i = self.ti
 
+        # What index to use
+        if not reset_i:
+            if validate:
+                i = self.vi
+            else:
+                i = self.ti
+        else:
+            i = 0
+
+        # Shuffle
         if shuffle:
             src_imgs = np.random.permutation(src_imgs)
 
@@ -85,9 +94,11 @@ class Dataloader:
             i = self.inc(i, len(src_imgs) - 1)
 
         ################################################################
-        if validate:
-            self.vi = i
-        else:
-            self.ti = i
+        # Update index
+        if not reset_i:
+            if validate:
+                self.vi = i
+            else:
+                self.ti = i
 
-        return tf.convert_to_tensor(img_As), tf.convert_to_tensor(img_Bs)
+        return tf.convert_to_tensor(img_As) / 127.5 - 1, tf.convert_to_tensor(img_Bs) / 127.5 - 1

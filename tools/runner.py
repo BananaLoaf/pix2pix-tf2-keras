@@ -1,5 +1,6 @@
 import cv2
 from tqdm import tqdm
+import numpy as np
 
 from metaneural.runner import *
 from nn.generator import *
@@ -35,6 +36,9 @@ class CustomRunner(Runner):
         ################################################################
         self.REAL_D = tf.ones((self.config.batch_size, *self.D_net.output_shape[1:]))
         self.FAKE_D = tf.zeros((self.config.batch_size, *self.D_net.output_shape[1:]))
+
+        self.V_REAL_D = tf.ones((self.dataloader.validation_split_size, *self.D_net.output_shape[1:]))
+        self.V_FAKE_D = tf.zeros((self.dataloader.validation_split_size, *self.D_net.output_shape[1:]))
 
         ################################################################
         return (
@@ -124,9 +128,6 @@ class CustomRunner(Runner):
         self._save_models()
 
     def validate(self) -> dict:
-        REAL_D = tf.ones((self.dataloader.validation_split_size, *self.D_net.output_shape[1:]))
-        FAKE_D = tf.zeros((self.dataloader.validation_split_size, *self.D_net.output_shape[1:]))
-
         real_As, real_Bs = self.dataloader.next(batch_size=self.dataloader.validation_split_size, shuffle=False, validate=True)
         assert isinstance(real_As, tf.Tensor)
         assert isinstance(real_Bs, tf.Tensor)
@@ -134,11 +135,11 @@ class CustomRunner(Runner):
         fake_Bs = self.G_net(real_As, training=True)
         fake_D = self.D_net([real_As, fake_Bs], training=True)
 
-        G_GAN_loss = tf.reduce_mean(tf.losses.MSE(REAL_D, fake_D))
+        G_GAN_loss = tf.reduce_mean(tf.losses.MSE(self.V_REAL_D, fake_D))
         G_L1 = tf.reduce_mean(tf.losses.MAE(real_Bs, fake_Bs)) * self.config.g_l1_lambda
 
-        real_D_L1 = tf.losses.MSE(REAL_D, self.D_net([real_As, real_Bs], training=True))
-        fake_D_L1 = tf.losses.MSE(FAKE_D, self.D_net([real_As, fake_Bs], training=True))
+        real_D_L1 = tf.losses.MSE(self.V_REAL_D, self.D_net([real_As, real_Bs], training=True))
+        fake_D_L1 = tf.losses.MSE(self.V_FAKE_D, self.D_net([real_As, fake_Bs], training=True))
         D_L1 = tf.reduce_mean(real_D_L1 + fake_D_L1)
 
         ################################################################
@@ -151,11 +152,11 @@ class CustomRunner(Runner):
     ################################################################
     # Sampling
     def generate_samples(self, real_As: tf.Tensor, real_Bs: tf.Tensor) -> np.ndarray:
-        fake_Bs = self.G_net(real_As, training=False)
+        fake_Bs = self.G_net(real_As, training=True)
 
-        real_As = tf.cast(real_As, tf.uint8)
-        real_Bs = tf.cast(real_Bs, tf.uint8)
-        fake_Bs = tf.cast(fake_Bs, tf.uint8)
+        real_As = tf.cast(tf.math.round((real_As + 1) * 127.5), tf.uint8)
+        real_Bs = tf.cast(tf.math.round((real_Bs + 1) * 127.5), tf.uint8)
+        fake_Bs = tf.cast(tf.math.round((fake_Bs + 1) * 127.5), tf.uint8)
 
         rows = []
         for i in range(SAMPLE_N):
@@ -176,7 +177,7 @@ class CustomRunner(Runner):
         return np.vstack(rows)
 
     def sample(self, step: int):
-        img_As, img_Bs = self.dataloader.next(batch_size=SAMPLE_N)
+        img_As, img_Bs = self.dataloader.next(batch_size=SAMPLE_N, shuffle=False, no_index=True)
         assert isinstance(img_As, tf.Tensor)
         assert isinstance(img_Bs, tf.Tensor)
 

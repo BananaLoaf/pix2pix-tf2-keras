@@ -47,7 +47,7 @@ class Dataloader:
             value += 1
         return value
 
-    def next(self, batch_size: int, shuffle: bool = True, validate: bool = False, reset_i: bool = False):
+    def next(self, batch_size: int, shuffle: bool = True, validate: bool = False, no_index: bool = False):
         # Which slice
         if validate:
             src_imgs = self.valid_imgs
@@ -55,7 +55,7 @@ class Dataloader:
             src_imgs = self.train_imgs
 
         # What index to use
-        if not reset_i:
+        if not no_index:
             if validate:
                 i = self.vi
             else:
@@ -95,7 +95,7 @@ class Dataloader:
 
         ################################################################
         # Update index
-        if not reset_i:
+        if not no_index:
             if validate:
                 self.vi = i
             else:

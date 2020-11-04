@@ -14,20 +14,20 @@ class UNet(tf.keras.models.Model):
 
         # If not training, take proper image and normalize it
         # If training, image should be already normalized
-        processed_input_layer = SwitchLayer(
-            run=MinMaxNormalizationLayer(min=0., max=255., newmin=-1., newmax=1.)
-        )(input_layer)
+        # processed_input_layer = SwitchLayer(
+        #     run=MinMaxNormalizationLayer(min=0., max=255., newmin=-1., newmax=1.)
+        # )(input_layer)
 
-        layers = self.encoder(input=processed_input_layer)
+        layers = self.encoder(input=input_layer)
         decoder_layer = self.decoder(layers, channels=output_channels)
 
         # If not training, make a proper image
         # If training, leave image normalized
-        output_layer = SwitchLayer(
-            run=MinMaxNormalizationLayer(min=-1., max=1., newmin=0., newmax=255., round=True)
-        )(decoder_layer)
+        # output_layer = SwitchLayer(
+        #     run=MinMaxNormalizationLayer(min=-1., max=1., newmin=0., newmax=255., round=True)
+        # )(decoder_layer)
 
-        super().__init__(input_layer, output_layer)
+        super().__init__(input_layer, decoder_layer)
 
     def encoder(self, input: tf.keras.layers.Input) -> List[tf.Tensor]:
         layers = []

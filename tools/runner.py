@@ -44,13 +44,11 @@ class CustomRunner(Runner):
         return (
             RegistryEntry(
                 name="G",
-                q_aware_train=True,
                 model=self.G_net,
                 optimizer=self.G_optimizer
             ),
             RegistryEntry(
                 name="D",
-                q_aware_train=False,
                 model=self.D_net,
                 optimizer=self.D_optimizer
             )
@@ -65,8 +63,8 @@ class CustomRunner(Runner):
         ################################################################
         # Train Generator
         with tf.GradientTape() as tape:
-            fake_Bs = self.G_net(real_As, training=True)
-            fake_D = self.D_net([real_As, fake_Bs], training=True)
+            fake_Bs = self.G_net(real_As)
+            fake_D = self.D_net([real_As, fake_Bs])
 
             G_GAN_loss = tf.reduce_mean(tf.losses.MSE(self.REAL_D, fake_D))
             G_L1 = tf.reduce_mean(tf.losses.MAE(real_Bs, fake_Bs)) * self.config.g_l1_lambda
@@ -76,8 +74,8 @@ class CustomRunner(Runner):
 
         # Train Discriminator
         with tf.GradientTape() as tape:
-            real_D_L1 = tf.losses.MSE(self.REAL_D, self.D_net([real_As, real_Bs], training=True))
-            fake_D_L1 = tf.losses.MSE(self.FAKE_D, self.D_net([real_As, fake_Bs], training=True))
+            real_D_L1 = tf.losses.MSE(self.REAL_D, self.D_net([real_As, real_Bs]))
+            fake_D_L1 = tf.losses.MSE(self.FAKE_D, self.D_net([real_As, fake_Bs]))
             D_L1 = tf.reduce_mean(real_D_L1 + fake_D_L1)
 
             grads = tape.gradient(D_L1, self.D_net.trainable_variables)
@@ -91,7 +89,7 @@ class CustomRunner(Runner):
         }
 
     @Runner.with_strategy
-    def train(self):
+    def train(self, resume: bool = False):
         pbar = tqdm(range(self.config.steps))
         pbar.update(self.config.step)
 
@@ -99,7 +97,7 @@ class CustomRunner(Runner):
             self.config.step = curr_step
 
             # Checkpoint
-            if curr_step % self.config.checkpoint_freq == 0:
+            if curr_step % self.config.checkpoint_freq == 0 and not resume:
                 print("\nSaving checkpoints")
                 self._snap(curr_step)
                 self._save_config()
@@ -123,6 +121,10 @@ class CustomRunner(Runner):
             pbar.set_description(" ".join([f"[{key}: {value:.3f}]" for key, value in metrics.items()]))
             pbar.update()
 
+            # Reset state
+            if resume:
+                resume = False
+
         pbar.close()
         print("Saving models")
         self._save_models()
@@ -132,14 +134,14 @@ class CustomRunner(Runner):
         assert isinstance(real_As, tf.Tensor)
         assert isinstance(real_Bs, tf.Tensor)
 
-        fake_Bs = self.G_net(real_As, training=True)
-        fake_D = self.D_net([real_As, fake_Bs], training=True)
+        fake_Bs = self.G_net(real_As)
+        fake_D = self.D_net([real_As, fake_Bs])
 
         G_GAN_loss = tf.reduce_mean(tf.losses.MSE(self.V_REAL_D, fake_D))
         G_L1 = tf.reduce_mean(tf.losses.MAE(real_Bs, fake_Bs)) * self.config.g_l1_lambda
 
-        real_D_L1 = tf.losses.MSE(self.V_REAL_D, self.D_net([real_As, real_Bs], training=True))
-        fake_D_L1 = tf.losses.MSE(self.V_FAKE_D, self.D_net([real_As, fake_Bs], training=True))
+        real_D_L1 = tf.losses.MSE(self.V_REAL_D, self.D_net([real_As, real_Bs]))
+        fake_D_L1 = tf.losses.MSE(self.V_FAKE_D, self.D_net([real_As, fake_Bs]))
         D_L1 = tf.reduce_mean(real_D_L1 + fake_D_L1)
 
         ################################################################
@@ -152,7 +154,7 @@ class CustomRunner(Runner):
     ################################################################
     # Sampling
     def generate_samples(self, real_As: tf.Tensor, real_Bs: tf.Tensor) -> np.ndarray:
-        fake_Bs = self.G_net(real_As, training=True)
+        fake_Bs = self.G_net(real_As)
 
         real_As = tf.cast(tf.math.round((real_As + 1) * 127.5), tf.uint8)
         real_Bs = tf.cast(tf.math.round((real_Bs + 1) * 127.5), tf.uint8)

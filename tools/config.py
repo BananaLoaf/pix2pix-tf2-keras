@@ -60,3 +60,4 @@ class Config(DefaultConfig):
 
 
 Config.devices[KWARGS][HELP].format(GPU_DEVICES)
+Config.q_aware_train[KWARGS][DEFAULT] = [0, 0]

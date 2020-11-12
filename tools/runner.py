@@ -9,7 +9,7 @@ from nn.discriminator import Discriminator
 from tools.config import Config
 
 
-SAMPLE_N = 10
+SAMPLE_N = 5
 
 
 class CustomRunner(Runner):
@@ -106,6 +106,7 @@ class CustomRunner(Runner):
             if curr_step % self.config.sample_freq == 0:
                 self.sample(curr_step)
 
+            # Validate
             if curr_step % self.config.validation_freq == 0:
                 print("\nValidating")
                 metrics = self.validate()
@@ -113,12 +114,20 @@ class CustomRunner(Runner):
                     for key, value in metrics.items():
                         tf.summary.scalar(key, value, step=curr_step)
 
+                # Histograms
+                for data in self.D_net.trainable_variables:
+                    tf.summary.histogram(f"D_{data.name}", data, step=curr_step)
+
+                for data in self.G_net.trainable_variables:
+                    tf.summary.histogram(f"G_{data.name}", data, step=curr_step)
+
             # Perform train step
             metrics = self.train_step()
             for key, value in metrics.items():
                 tf.summary.scalar(key, value, step=curr_step)
 
-            pbar.set_description(" ".join([f"[{key}: {value:.3f}]" for key, value in metrics.items()]))
+            pbar.set_description(f"[Checkpoint in {self.config.checkpoint_freq - (curr_step % self.config.checkpoint_freq)} steps] " +
+                                 " ".join([f"[{key}: {value:.3f}]" for key, value in metrics.items()]))
             pbar.update()
 
             # Reset state
@@ -161,7 +170,7 @@ class CustomRunner(Runner):
         fake_Bs = tf.cast(tf.math.round((fake_Bs + 1) * 127.5), tf.uint8)
 
         rows = []
-        for i in range(SAMPLE_N):
+        for i in range(real_As.shape[0]):
             real_A = real_As[i].numpy()
             real_B = real_Bs[i].numpy()
             fake_B = fake_Bs[i].numpy()
@@ -179,7 +188,10 @@ class CustomRunner(Runner):
         return np.vstack(rows)
 
     def sample(self, step: int):
-        img_As, img_Bs = self.dataloader.next(batch_size=SAMPLE_N, shuffle=False, no_index=True)
+        img_As_t, img_Bs_t = self.dataloader.next(batch_size=SAMPLE_N, shuffle=False, no_index=True)
+        img_As_v, img_Bs_v = self.dataloader.next(batch_size=SAMPLE_N, shuffle=False, no_index=True, validate=True)
+        img_As, img_Bs = tf.concat((img_As_t, img_As_v), 0), tf.concat((img_Bs_t, img_Bs_v), 0)
+
         assert isinstance(img_As, tf.Tensor)
         assert isinstance(img_Bs, tf.Tensor)
 

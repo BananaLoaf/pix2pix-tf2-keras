@@ -1,88 +1,99 @@
-from typing import List
+from typing import List, Callable, Optional
 
 import tensorflow as tf
+import tensorflow_addons as tfa
 
 from metaneural.nn import *
 
 
 class UNet(tf.keras.models.Model):
-    def __init__(self, resolution: int, input_channels: int, output_channels: int, filters: int, n_blocks: int):
+    def __init__(self, resolution: int, input_channels: int, output_channels: int, filters: int, n_blocks: int,
+                 norm_layer: str, dropout: bool):
         self.filters = filters
         self.n_blocks = n_blocks
 
+        self.norm_layer = {
+            "BatchNormalization": tf.keras.layers.BatchNormalization,
+            "InstanceNormalization": tfa.layers.InstanceNormalization,
+        }[norm_layer]
+        self.bias = self.norm_layer == tfa.layers.InstanceNormalization
+        self.dropout = dropout
+
         input_layer = tf.keras.layers.Input(shape=(resolution, resolution, input_channels))
-
-        # If not training, take proper image and normalize it
-        # If training, image should be already normalized
-        # processed_input_layer = SwitchLayer(
-        #     run=MinMaxNormalizationLayer(min=0., max=255., newmin=-1., newmax=1.)
-        # )(input_layer)
-
         layers = self.encoder(input=input_layer)
         decoder_layer = self.decoder(layers, channels=output_channels)
-
-        # If not training, make a proper image
-        # If training, leave image normalized
-        # output_layer = SwitchLayer(
-        #     run=MinMaxNormalizationLayer(min=-1., max=1., newmin=0., newmax=255., round=True)
-        # )(decoder_layer)
 
         super().__init__(input_layer, decoder_layer)
 
     def encoder(self, input: tf.keras.layers.Input) -> List[tf.Tensor]:
         layers = []
 
-        e = self._conv2d(input, filters=self.filters, batch_norm=False)
+        # First
+        e = self._conv2d(input, filters=self.filters, kernel_size=4, strides=2, bias=self.bias, relu=False,
+                         norm_layer=None)
         layers.append(e)
 
-        for pwr in [2, 4, 8]:
-            e = self._conv2d(e, filters=self.filters * pwr)
+        # Middle
+        for i in range(1, self.n_blocks - 1):
+            mult = min(2 ** i, 8)
+            e = self._conv2d(e, filters=self.filters * mult, kernel_size=4, strides=2, bias=self.bias, relu=True,
+                             norm_layer=self.norm_layer)
             layers.append(e)
 
-        while len(layers) < self.n_blocks:
-            e = self._conv2d(e, filters=self.filters * 8)
-            layers.append(e)
+        # Last
+        mult = min(2 ** self.n_blocks, 8)
+        e = self._conv2d(e, filters=self.filters * mult, kernel_size=4, strides=2, bias=self.bias, relu=True,
+                         norm_layer=None)
+        layers.append(e)
 
         return layers
 
     def decoder(self, layers: List[tf.Tensor], channels: int) -> tf.Tensor:
-        layers = reversed(layers)
+        layers = list(reversed(layers))
 
-        e = next(layers)
-        skip = next(layers)
-        d = self._deconv2d(e, skip, filters=skip.shape[3])
+        d = layers[0]
+        for i, skip in enumerate(layers[1:]):
+            filters = skip.shape[3]
 
-        while True:
             try:
-                skip = next(layers)
-                d = self._deconv2d(d, skip, filters=skip.shape[3])
-            except StopIteration:
-                break
+                # If amount of filters is the same as in the next layer
+                dropout = self.dropout and filters == layers[1:][i+1].shape[3]
+            except IndexError:
+                dropout = False
 
-        d = tf.keras.layers.UpSampling2D(size=2)(d)
-        d = tf.keras.layers.Conv2D(channels, kernel_size=4, strides=1, padding='same',
-                                   activation=tf.keras.activations.tanh, name="gen_output")(d)
+            d = self._deconv2d(d, skip, filters=filters, kernel_size=4, strides=2, bias=self.bias, dropout=dropout,
+                               norm_layer=self.norm_layer)
+
+        d = tf.keras.layers.ReLU()(d)
+        d = tf.keras.layers.Conv2DTranspose(channels, kernel_size=4, strides=2, padding='same', use_bias=True,
+                                            activation=tf.keras.activations.tanh)(d)
         return d
 
     @staticmethod
-    def _conv2d(input, filters: int, kernel_size: int = 4, batch_norm: bool = True) -> tf.Tensor:
-        x = tf.keras.layers.Conv2D(filters, kernel_size=kernel_size, strides=2, padding='same')(input)
-        if batch_norm:
-            x = tf.keras.layers.BatchNormalization(momentum=0.8)(x)
-        x = tf.keras.layers.LeakyReLU()(x)
+    def _conv2d(x, filters: int, kernel_size: int, strides: int, bias: bool,
+                relu: bool, norm_layer: Optional) -> tf.Tensor:
+        if relu:
+            x = tf.keras.layers.LeakyReLU(alpha=0.2)(x)
+
+        x = tf.keras.layers.Conv2D(filters, kernel_size=kernel_size, strides=strides, padding='same', use_bias=bias)(x)
+
+        if norm_layer is not None:
+            x = norm_layer(momentum=0.1, epsilon=1e-5)(x)
 
         return x
 
     @staticmethod
-    def _deconv2d(input, skip_input, filters: int, kernel_size: int = 4, dropout_rate: int = 0) -> tf.Tensor:
-        x = tf.keras.layers.UpSampling2D(size=2)(input)
-        x = tf.keras.layers.Conv2D(filters, kernel_size=kernel_size, strides=1, padding='same')(x)
-        if dropout_rate:
-            x = tf.keras.layers.Dropout(dropout_rate)(x)
-        x = tf.keras.layers.BatchNormalization(momentum=0.8)(x)
-        x = tf.keras.layers.LeakyReLU()(x)
+    def _deconv2d(x, skip_x, filters: int, kernel_size: int, strides: int, bias: bool, dropout: bool, norm_layer) -> tf.Tensor:
+        x = tf.keras.layers.ReLU()(x)
+        x = tf.keras.layers.Conv2DTranspose(filters, kernel_size=kernel_size, strides=strides, use_bias=bias, padding='same')(x)
 
-        x = tf.keras.layers.Concatenate()([x, skip_input])
+        x = norm_layer(momentum=0.1, epsilon=1e-5)(x)
+
+        if dropout:
+            x = tf.keras.layers.Dropout(0.5)(x)
+
+        # Skip is second only because it is more obvious in the architecture image
+        x = tf.keras.layers.Concatenate()([x, skip_x])
 
         return x
 
@@ -92,7 +103,8 @@ class UNet32(UNet):
         super().__init__(resolution=config.resolution,
                          input_channels=config.in_channels,
                          output_channels=config.out_channels,
-                         filters=config.filters, n_blocks=5)
+                         filters=config.filters, n_blocks=5,
+                         norm_layer=config.norm_layer, dropout=config.dropout)
 
 
 class UNet64(UNet):
@@ -100,7 +112,8 @@ class UNet64(UNet):
         super().__init__(resolution=config.resolution,
                          input_channels=config.in_channels,
                          output_channels=config.out_channels,
-                         filters=config.filters, n_blocks=6)
+                         filters=config.filters, n_blocks=6,
+                         norm_layer=config.norm_layer, dropout=config.dropout)
 
 
 class UNet128(UNet):
@@ -108,7 +121,8 @@ class UNet128(UNet):
         super().__init__(resolution=config.resolution,
                          input_channels=config.in_channels,
                          output_channels=config.out_channels,
-                         filters=config.filters, n_blocks=7)
+                         filters=config.filters, n_blocks=7,
+                         norm_layer=config.norm_layer, dropout=config.dropout)
 
 
 class UNet256(UNet):
@@ -116,7 +130,8 @@ class UNet256(UNet):
         super().__init__(resolution=config.resolution,
                          input_channels=config.in_channels,
                          output_channels=config.out_channels,
-                         filters=config.filters, n_blocks=8)
+                         filters=config.filters, n_blocks=8,
+                         norm_layer=config.norm_layer, dropout=config.dropout)
 
 
 class UNet512(UNet):
@@ -124,7 +139,8 @@ class UNet512(UNet):
         super().__init__(resolution=config.resolution,
                          input_channels=config.in_channels,
                          output_channels=config.out_channels,
-                         filters=config.filters, n_blocks=9)
+                         filters=config.filters, n_blocks=9,
+                         norm_layer=config.norm_layer, dropout=config.dropout)
 
 
 class UNet1024(UNet):
@@ -132,4 +148,5 @@ class UNet1024(UNet):
         super().__init__(resolution=config.resolution,
                          input_channels=config.in_channels,
                          output_channels=config.out_channels,
-                         filters=config.filters, n_blocks=10)
+                         filters=config.filters, n_blocks=10,
+                         norm_layer=config.norm_layer, dropout=config.dropout)

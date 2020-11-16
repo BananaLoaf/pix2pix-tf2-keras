@@ -29,7 +29,9 @@ class CustomRunner(Runner):
         self.D_net: tf.keras.models.Model = Discriminator(input_resolution=self.config.resolution,
                                                           a_channels=self.config.in_channels,
                                                           b_channels=self.config.out_channels,
-                                                          filters=self.config.filters)
+                                                          filters=self.config.filters,
+                                                          n_blocks=3,
+                                                          norm_layer=self.config.norm_layer)
         self.D_optimizer = tf.keras.optimizers.Adam(learning_rate=self.config.d_lr,
                                                     beta_1=self.config.d_beta1)
 
@@ -93,19 +95,23 @@ class CustomRunner(Runner):
         pbar = tqdm(range(self.config.steps))
         pbar.update(self.config.step)
 
-        for curr_step in range(self.config.step, self.config.steps):
-            self.config.step = curr_step
-
+        for curr_step in range(self.config.step, self.config.steps + 1):
             # Checkpoint
             if curr_step % self.config.checkpoint_freq == 0 and not resume:
                 print("\nSaving checkpoints")
                 self._snap(curr_step)
+                self.config.step = curr_step
                 self._save_config()
 
             # Save sample image
             if curr_step % self.config.sample_freq == 0:
                 self.sample(curr_step)
 
+            # Skip last step cuz it's not saved anyway
+            if curr_step == self.config.steps:
+                break
+
+            ################################################################
             # Validate
             if curr_step % self.config.validation_freq == 0:
                 print("\nValidating")

@@ -24,6 +24,12 @@ class Config(DefaultConfig):
     generator = {GROUP_NAME: "Model params",
                  ARGS: ["-g", "--generator"],
                  KWARGS: {TYPE: str, DEFAULT: UNet256.__name__, CHOICES: list(GENERATORS.keys()), HELP: "Generator (default: %(default)s)"}}
+    norm_layer = {GROUP_NAME: "Model params",
+                  ARGS: ["-nl", "--norm-layer"],
+                  KWARGS: {TYPE: str, DEFAULT: "BatchNormalization", CHOICES: ["BatchNormalization", "InstanceNormalization"], HELP: "Normalization layer, bias used if InstanceNormalization (default: %(default)s)"}}
+    dropout = {GROUP_NAME: "Model params",
+               ARGS: ["--dropout"],
+               KWARGS: {ACTION: "store_true", HELP: "Use Dropout layer (default: %(default)s)"}}
 
     # Dataloader params
     batch_size = {GROUP_NAME: "Dataloader params",

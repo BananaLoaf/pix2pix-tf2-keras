@@ -26,8 +26,8 @@ class Dataloader:
             assert self.A.joinpath(img_name).exists(), f"{self.A.joinpath(img_name)} does not exist"
             assert self.B.joinpath(img_name).exists(), f"{self.B.joinpath(img_name)} does not exist"
 
-        self.train_imgs = self.img_names[:-int(len(self.img_names) * config.validation_split)]
-        self.valid_imgs = self.img_names[-int(len(self.img_names) * config.validation_split):]
+        self.train_imgs = self.img_names[:-int(len(self.img_names) * config.test_split)]
+        self.test_imgs = self.img_names[-int(len(self.img_names) * config.test_split):]
 
         self.ti = 0
         self.vi = 0
@@ -37,8 +37,8 @@ class Dataloader:
         return len(self.train_imgs)
 
     @property
-    def validation_split_size(self) -> int:
-        return len(self.valid_imgs)
+    def test_split_size(self) -> int:
+        return len(self.test_imgs)
 
     def inc(self, value: int, max_val: int):
         if value == max_val:
@@ -47,16 +47,16 @@ class Dataloader:
             value += 1
         return value
 
-    def next(self, batch_size: int, shuffle: bool = True, validate: bool = False, no_index: bool = False):
+    def next(self, batch_size: int, shuffle: bool = True, test: bool = False, no_index: bool = False):
         # Which slice
-        if validate:
-            src_imgs = self.valid_imgs
+        if test:
+            src_imgs = self.test_imgs
         else:
             src_imgs = self.train_imgs
 
         # What index to use
         if not no_index:
-            if validate:
+            if test:
                 i = self.vi
             else:
                 i = self.ti
@@ -96,7 +96,7 @@ class Dataloader:
         ################################################################
         # Update index
         if not no_index:
-            if validate:
+            if test:
                 self.vi = i
             else:
                 self.ti = i

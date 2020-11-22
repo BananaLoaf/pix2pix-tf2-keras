@@ -39,8 +39,8 @@ class CustomRunner(Runner):
         self.REAL_D = tf.ones((self.config.batch_size, *self.D_net.output_shape[1:]))
         self.FAKE_D = tf.zeros((self.config.batch_size, *self.D_net.output_shape[1:]))
 
-        self.V_REAL_D = tf.ones((self.dataloader.validation_split_size, *self.D_net.output_shape[1:]))
-        self.V_FAKE_D = tf.zeros((self.dataloader.validation_split_size, *self.D_net.output_shape[1:]))
+        self.V_REAL_D = tf.ones((self.dataloader.test_split_size, *self.D_net.output_shape[1:]))
+        self.V_FAKE_D = tf.zeros((self.dataloader.test_split_size, *self.D_net.output_shape[1:]))
 
         ################################################################
         return (
@@ -143,11 +143,11 @@ class CustomRunner(Runner):
         pbar.close()
 
     def test(self) -> dict:
-        real_As, real_Bs = self.dataloader.next(batch_size=self.dataloader.validation_split_size, shuffle=False, validate=True)
+        real_As, real_Bs = self.dataloader.next(batch_size=self.dataloader.test_split_size, shuffle=False, test=True)
         assert isinstance(real_As, tf.Tensor)
         assert isinstance(real_Bs, tf.Tensor)
 
-        fake_Bs = self.G_net(real_As)
+        ################################################################
         fake_D = self.D_net([real_As, fake_Bs])
 
         G_GAN_loss = tf.reduce_mean(tf.losses.MSE(self.V_REAL_D, fake_D))
@@ -193,7 +193,7 @@ class CustomRunner(Runner):
 
     def sample(self, step: int):
         img_As_t, img_Bs_t = self.dataloader.next(batch_size=SAMPLE_N, shuffle=False, no_index=True)
-        img_As_v, img_Bs_v = self.dataloader.next(batch_size=SAMPLE_N, shuffle=False, no_index=True, validate=True)
+        img_As_v, img_Bs_v = self.dataloader.next(batch_size=SAMPLE_N, shuffle=False, no_index=True, test=True)
         img_As, img_Bs = tf.concat((img_As_t, img_As_v), 0), tf.concat((img_Bs_t, img_Bs_v), 0)
 
         assert isinstance(img_As, tf.Tensor)

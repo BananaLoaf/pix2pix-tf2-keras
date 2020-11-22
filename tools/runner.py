@@ -112,11 +112,11 @@ class CustomRunner(Runner):
                 break
 
             ################################################################
-            # Validate
-            if curr_step % self.config.validation_freq == 0:
-                print("\nValidating")
-                metrics = self.validate()
-                with self.validate_writer.as_default():
+            # Test
+            if curr_step % self.config.test_freq == 0:
+                print("\nTesting")
+                metrics = self.test()
+                with self.test_writer.as_default():
                     for key, value in metrics.items():
                         tf.summary.scalar(key, value, step=curr_step)
 
@@ -141,10 +141,8 @@ class CustomRunner(Runner):
                 resume = False
 
         pbar.close()
-        print("Saving models")
-        self._save_models()
 
-    def validate(self) -> dict:
+    def test(self) -> dict:
         real_As, real_Bs = self.dataloader.next(batch_size=self.dataloader.validation_split_size, shuffle=False, validate=True)
         assert isinstance(real_As, tf.Tensor)
         assert isinstance(real_Bs, tf.Tensor)

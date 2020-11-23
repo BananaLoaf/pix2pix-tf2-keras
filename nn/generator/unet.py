@@ -19,6 +19,16 @@ class UNet(tf.keras.models.Model):
         self.bias = self.norm_layer == tfa.layers.InstanceNormalization
         self.dropout = dropout
 
+        # input_layer = tf.keras.layers.Input(shape=(resolution, resolution, input_channels))
+        # norm = Switch(run=tf.keras.layers.experimental.preprocessing.Rescaling(1. / 127.5, offset=-1))(input_layer)
+        #
+        # layers = self.encoder(input=norm)
+        # decoder_layer = self.decoder(layers, channels=output_channels)
+        #
+        # output_layer = Switch(run=tf.keras.layers.experimental.preprocessing.Rescaling(127.5, offset=127.5))(decoder_layer)
+        #
+        # super().__init__(input_layer, output_layer)
+
         input_layer = tf.keras.layers.Input(shape=(resolution, resolution, input_channels))
         layers = self.encoder(input=input_layer)
         decoder_layer = self.decoder(layers, channels=output_channels)

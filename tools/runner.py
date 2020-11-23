@@ -1,4 +1,5 @@
-import cv2
+import itertools
+
 from tqdm import tqdm
 import numpy as np
 
@@ -58,15 +59,24 @@ class CustomRunner(Runner):
 
     ################################################################
     def train_step(self) -> dict:
-        real_As, real_Bs = self.dataloader.next(batch_size=self.config.batch_size)
+        real_As = []
+        real_Bs = []
+
+        for real_A, real_B in self.dataloader.next(batch_size=self.config.batch_size, augment=True):
+            real_As.append(real_A)
+            real_Bs.append(real_B)
+
+        real_As = tf.concat(real_As, axis=0)
+        real_Bs = tf.concat(real_Bs, axis=0)
+
         assert isinstance(real_As, tf.Tensor)
         assert isinstance(real_Bs, tf.Tensor)
 
         ################################################################
         # Train Generator
         with tf.GradientTape() as tape:
-            fake_Bs = self.G_net(real_As)
-            fake_D = self.D_net([real_As, fake_Bs])
+            fake_Bs = self.G_net(real_As, training=True)
+            fake_D = self.D_net([real_As, fake_Bs], training=True)
 
             G_GAN_loss = tf.reduce_mean(tf.losses.MSE(self.REAL_D, fake_D))
             G_L1 = tf.reduce_mean(tf.losses.MAE(real_Bs, fake_Bs)) * self.config.g_l1_lambda
@@ -76,8 +86,8 @@ class CustomRunner(Runner):
 
         # Train Discriminator
         with tf.GradientTape() as tape:
-            real_D_L1 = tf.losses.MSE(self.REAL_D, self.D_net([real_As, real_Bs]))
-            fake_D_L1 = tf.losses.MSE(self.FAKE_D, self.D_net([real_As, fake_Bs]))
+            real_D_L1 = tf.losses.MSE(self.REAL_D, self.D_net([real_As, real_Bs], training=True))
+            fake_D_L1 = tf.losses.MSE(self.FAKE_D, self.D_net([real_As, fake_Bs], training=True))
             D_L1 = tf.reduce_mean(real_D_L1 + fake_D_L1)
 
             grads = tape.gradient(D_L1, self.D_net.trainable_variables)
@@ -92,10 +102,10 @@ class CustomRunner(Runner):
 
     @Runner.with_strategy
     def train(self, resume: bool = False):
-        pbar = tqdm(range(self.config.steps))
+        pbar = tqdm(range(self.config.step, self.config.steps + 1), total=self.config.steps)
         pbar.update(self.config.step)
 
-        for curr_step in range(self.config.step, self.config.steps + 1):
+        for curr_step in pbar:
             # Checkpoint
             if curr_step % self.config.checkpoint_freq == 0 and not resume:
                 print("\nSaving checkpoints")
@@ -134,20 +144,27 @@ class CustomRunner(Runner):
 
             pbar.set_description(f"[Checkpoint in {self.config.checkpoint_freq - (curr_step % self.config.checkpoint_freq)} steps] " +
                                  " ".join([f"[{key}: {value:.3f}]" for key, value in metrics.items()]))
-            pbar.update()
 
             # Reset state
             if resume:
                 resume = False
 
-        pbar.close()
-
     def test(self) -> dict:
-        real_As, real_Bs = self.dataloader.next(batch_size=self.dataloader.test_split_size, shuffle=False, test=True)
+        real_As = []
+        real_Bs = []
+
+        for real_A, real_B in self.dataloader.next(batch_size=self.dataloader.test_split_size, shuffle=False, test=True):
+            real_As.append(real_A)
+            real_Bs.append(real_B)
+
+        real_As = tf.concat(real_As, axis=0)
+        real_Bs = tf.concat(real_Bs, axis=0)
+
         assert isinstance(real_As, tf.Tensor)
         assert isinstance(real_Bs, tf.Tensor)
 
         ################################################################
+        fake_Bs = self.G_net(real_As)
         fake_D = self.D_net([real_As, fake_Bs])
 
         G_GAN_loss = tf.reduce_mean(tf.losses.MSE(self.V_REAL_D, fake_D))
@@ -166,39 +183,44 @@ class CustomRunner(Runner):
 
     ################################################################
     # Sampling
-    def generate_samples(self, real_As: tf.Tensor, real_Bs: tf.Tensor) -> np.ndarray:
+    def generate_samples(self, real_As: tf.Tensor, real_Bs: tf.Tensor) -> tf.Tensor:
         fake_Bs = self.G_net(real_As)
-
-        real_As = tf.cast(tf.math.round((real_As + 1) * 127.5), tf.uint8)
-        real_Bs = tf.cast(tf.math.round((real_Bs + 1) * 127.5), tf.uint8)
-        fake_Bs = tf.cast(tf.math.round((fake_Bs + 1) * 127.5), tf.uint8)
 
         rows = []
         for i in range(real_As.shape[0]):
-            real_A = real_As[i].numpy()
-            real_B = real_Bs[i].numpy()
-            fake_B = fake_Bs[i].numpy()
+            real_A = tf.keras.layers.experimental.preprocessing.Resizing(height=256, width=256, interpolation="nearest")(real_As[i])
+            real_B = tf.keras.layers.experimental.preprocessing.Resizing(height=256, width=256, interpolation="nearest")(real_Bs[i])
+            fake_B = tf.keras.layers.experimental.preprocessing.Resizing(height=256, width=256, interpolation="nearest")(fake_Bs[i])
 
             if real_A.shape[2] == 1:
-                real_A = cv2.cvtColor(real_A, cv2.COLOR_GRAY2RGB)
+                real_A = tf.concat([real_A, real_A, real_A], axis=2)
             if real_B.shape[2] == 1:
-                real_B = cv2.cvtColor(real_B, cv2.COLOR_GRAY2RGB)
+                real_B = tf.concat([real_B, real_B, real_B], axis=2)
             if fake_B.shape[2] == 1:
-                fake_B = cv2.cvtColor(fake_B, cv2.COLOR_GRAY2RGB)
+                fake_B = tf.concat([fake_B, fake_B, fake_B], axis=2)
 
-            row = np.hstack([real_A, real_B, fake_B])
+            row = tf.concat([real_A, real_B, fake_B], axis=1)
             rows.append(row)
 
-        return np.vstack(rows)
+        return tf.concat(rows, axis=0)
 
     def sample(self, step: int):
-        img_As_t, img_Bs_t = self.dataloader.next(batch_size=SAMPLE_N, shuffle=False, no_index=True)
-        img_As_v, img_Bs_v = self.dataloader.next(batch_size=SAMPLE_N, shuffle=False, no_index=True, test=True)
-        img_As, img_Bs = tf.concat((img_As_t, img_As_v), 0), tf.concat((img_Bs_t, img_Bs_v), 0)
+        real_As = []
+        real_Bs = []
 
-        assert isinstance(img_As, tf.Tensor)
-        assert isinstance(img_Bs, tf.Tensor)
+        for real_A, real_B in itertools.chain(
+                self.dataloader.next(batch_size=SAMPLE_N, shuffle=False),
+                self.dataloader.next(batch_size=SAMPLE_N, shuffle=False, test=True)):
+            real_As.append(real_A)
+            real_Bs.append(real_B)
 
-        rgb_img = self.generate_samples(img_As, img_Bs)
+        real_As = tf.concat(real_As, axis=0)
+        real_Bs = tf.concat(real_Bs, axis=0)
+
+        assert isinstance(real_As, tf.Tensor)
+        assert isinstance(real_Bs, tf.Tensor)
+
+        ################################################################
+        rgb_img = self.generate_samples(real_As, real_Bs)
         img_path = self.samples_path.joinpath(f"{str(step).zfill(10)}.png")
-        cv2.imwrite(str(img_path), cv2.cvtColor(rgb_img, cv2.COLOR_RGB2BGR))
+        tf.keras.preprocessing.image.save_img(img_path, rgb_img)

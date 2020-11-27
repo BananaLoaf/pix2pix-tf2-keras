@@ -32,9 +32,6 @@ class Config(DefaultConfig):
                KWARGS: {ACTION: "store_true", HELP: "Use Dropout layer (default: %(default)s)"}}
 
     # Dataloader params
-    batch_size = {GROUP_NAME: "Dataloader params",
-                  ARGS: ["-b", "--batch-size"],
-                  KWARGS: {TYPE: int, DEFAULT: 1, HELP: "Batch size (default: %(default)s)"}}
     dataset_a = {GROUP_NAME: "Dataloader params",
                  ARGS: ["-da", "--dataset-a"],
                  KWARGS: {TYPE: str, REQUIRED: True, HELP: "Path to dataset A, only PNG"}}

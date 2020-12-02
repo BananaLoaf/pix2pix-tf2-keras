@@ -5,7 +5,6 @@ import numpy as np
 
 from metaneural.runner import *
 from nn.generator import *
-from tools.dataloader import Dataloader
 import tensorflow.keras.layers.experimental.preprocessing as preprocessing
 from nn.discriminator import Discriminator
 from tools.config import Config
@@ -14,7 +13,7 @@ from tools.config import Config
 SAMPLE_N = 5
 
 
-class GANTrainer(tf.keras.models.Model):
+class Trainer(tf.keras.models.Model):
     def __init__(self, G_net, D_net):
         # Fake graph for tensorboard
         real_A = tf.keras.layers.Input(shape=G_net.input_shape[1:], name="real_A")
@@ -30,7 +29,7 @@ class GANTrainer(tf.keras.models.Model):
         self.D_net = D_net
 
     def compile(self, G_optimizer, D_optimizer, g_l1_lambda):
-        super(GANTrainer, self).compile(run_eagerly=True)
+        super(Trainer, self).compile(run_eagerly=True)
         self.G_optimizer = G_optimizer
         self.D_optimizer = D_optimizer
 
@@ -40,12 +39,14 @@ class GANTrainer(tf.keras.models.Model):
         self.FAKE_D = tf.zeros((1, *self.D_net.output_shape[1:]))
 
     def augment(self, x: tf.Tensor, seed: int) -> tf.Tensor:
-        tf.random.set_seed(seed)  # RandomFlip is stupid, this stays until tf 2.4
+        tf.random.set_seed(seed)  # RandomFlip is stupid, this stays until tf 2.4+
+        h = x.shape[1]
+        w = x.shape[2]
         x = preprocessing.RandomFlip("horizontal", seed=seed)(x)
         # img = preprocessing.RandomTranslation(height_factor=(-0.1, 0.1),
         #                                       width_factor=(-0.1, 0.1), seed=seed)(img)
-        x = preprocessing.RandomCrop(height=tf.cast(0.9 * x.shape[1], dtype=tf.int32),
-                                     width=tf.cast(0.9 * x.shape[2], dtype=tf.int32),
+        x = preprocessing.RandomCrop(height=tf.cast(tf.random.uniform((), minval=0.9 * h, maxval=h), tf.int32),
+                                     width=tf.cast(tf.random.uniform((), minval=0.9 * w, maxval=w), tf.int32),
                                      seed=seed)(x)
         # img = preprocessing.RandomZoom((0., -0.1), seed=seed)(img)
 
@@ -118,7 +119,7 @@ class CustomRunner(Runner):
 
     ################################################################
     @Runner.with_strategy
-    def init(self) -> Tuple[GANTrainer, Dict[str, tf.keras.optimizers.Optimizer]]:
+    def init(self) -> Tuple[Trainer, Dict[str, tf.keras.optimizers.Optimizer]]:
         G_net: tf.keras.models.Model = GENERATORS[self.config.generator](config=self.config)
         G_optimizer = tf.keras.optimizers.Adam(learning_rate=self.config.g_lr,
                                                beta_1=self.config.g_beta1)
@@ -134,7 +135,7 @@ class CustomRunner(Runner):
                                                beta_1=self.config.d_beta1)
 
         ################################################################
-        model = GANTrainer(G_net, D_net)
+        model = Trainer(G_net, D_net)
         return model, {"G": G_optimizer, "D": D_optimizer}
 
     def _loader_generator(self, img_names):
@@ -154,22 +155,22 @@ class CustomRunner(Runner):
 
             yield img_A, img_B
 
-    def init_dataloader(self) -> Tuple[tf.data.Dataset, tf.data.Dataset]:
+    def init_dataset(self) -> Dict[str, tf.data.Dataset]:
         # Load names
         img_names = sorted([p.name for p in Path(self.config.dataset_a).glob("*.png")])
-        train_imgs = img_names[:-round(len(img_names) * self.config.test_split)]
-        test_imgs = img_names[-round(len(img_names) * self.config.test_split):]
+        train_names = img_names[:-round(len(img_names) * self.config.test_split)]
+        test_names = img_names[-round(len(img_names) * self.config.test_split):]
 
         # Init datasets
-        train_dataset = tf.data.Dataset.from_generator(lambda: self._loader_generator(train_imgs),
+        train_dataset = tf.data.Dataset.from_generator(lambda: self._loader_generator(train_names),
                                                        output_types=(tf.float32, tf.float32))
         train_dataset.cache("train_dataset_cache")
 
-        test_dataset = tf.data.Dataset.from_generator(lambda: self._loader_generator(test_imgs),
+        test_dataset = tf.data.Dataset.from_generator(lambda: self._loader_generator(test_names),
                                                       output_types=(tf.float32, tf.float32))
         test_dataset.cache("test_dataset_cache")
 
-        return train_dataset, test_dataset
+        return {"train": train_dataset, "test": test_dataset}
 
     def quantize_model(self):
         if bool(self.config.q_aware_train[0]):
@@ -180,17 +181,28 @@ class CustomRunner(Runner):
             import tensorflow_model_optimization as tfmot
             self.model.D_net = tfmot.quantization.keras.quantize_model(self.model.D_net)
 
+    ################################################################
     def train(self, resume: bool = False):
-        tb = tf.keras.callbacks.TensorBoard(log_dir=self.run_path, histogram_freq=self.config.test_freq,
-                                            update_freq="batch", profile_batch=10)
-        # TODO checkpoint and config callback
-        cb = tf.keras.callbacks.LambdaCallback(on_train_begin=None, on_batch_end=None)
+        tensorboard_cb = tf.keras.callbacks.TensorBoard(
+            log_dir=self.run_path,
+            histogram_freq=self.config.test_freq,
+            update_freq="batch")
+        checkpoint_cb = tf.keras.callbacks.LambdaCallback(
+            on_train_begin=lambda metrics: self.snap(0),
+            on_epoch_end=lambda epoch, logs: self.snap(epoch + 1) if (epoch + 1) % self.config.checkpoint_freq == 0 else None)
+        config_cb = tf.keras.callbacks.LambdaCallback(
+            on_train_begin=lambda metrics: self.save_config(0),
+            on_epoch_end=lambda epoch, logs: self.save_config(epoch + 1) if (epoch + 1) % self.config.checkpoint_freq == 0 else None)
+        sample_cb = tf.keras.callbacks.LambdaCallback(
+            on_train_begin=lambda metrics: self.sample(),
+            on_batch_end=lambda batch, logs: self.sample() if (batch + 1) % self.config.sample_freq == 0 else None)
 
         self.model.compile(G_optimizer=self.optimizer["G"], D_optimizer=self.optimizer["D"],
                            g_l1_lambda=self.config.g_l1_lambda)
-        self.model.fit(self.train_dataset, validation_data=self.test_dataset, validation_freq=self.config.test_freq,
-                       initial_epoch=self.config.epoch, epochs=self.config.epochs, batch_size=self.config.batch_size,
-                       callbacks=[tb, cb])
+        self.model.fit(self.dataset["train"],
+                       validation_data=self.dataset["test"], validation_freq=self.config.test_freq,
+                       initial_epoch=self.config.epoch, epochs=self.config.epochs,
+                       batch_size=self.config.batch_size, callbacks=[tensorboard_cb, checkpoint_cb, config_cb, sample_cb])
 
     ################################################################
     # Saving, snapping, etc
@@ -198,95 +210,72 @@ class CustomRunner(Runner):
         self._summary(self.model.G_net, "G", plot)
         self._summary(self.model.D_net, "D", plot)
 
-    # @Runner.with_strategy
-    # def train(self, resume: bool = False):
-    #     pbar = tqdm(range(self.config.step, self.config.steps + 1), total=self.config.steps)
-    #     pbar.update(self.config.step)
-    #
-    #     for curr_step in pbar:
-    #         # Checkpoint
-    #         if curr_step % self.config.checkpoint_freq == 0 and not resume:
-    #             print("\nSaving checkpoints")
-    #             self.snap(curr_step)
-    #             self.config.step = curr_step
-    #             self.save_config()
-    #
-    #         # Save sample image
-    #         if curr_step % self.config.sample_freq == 0:
-    #             self.sample(curr_step)
-    #
-    #         # Skip last step cuz it's not saved anyway
-    #         if curr_step == self.config.steps:
-    #             break
-    #
-    #         ################################################################
-    #         # Test
-    #         if curr_step % self.config.test_freq == 0:
-    #             print("\nTesting")
-    #             metrics = self.test()
-    #             with self.test_writer.as_default():
-    #                 for key, value in metrics.items():
-    #                     tf.summary.scalar(key, value, step=curr_step)
-    #
-    #             # Histograms
-    #             for data in self.D_net.trainable_variables:
-    #                 tf.summary.histogram(f"D_{data.name}", data, step=curr_step)
-    #
-    #             for data in self.G_net.trainable_variables:
-    #                 tf.summary.histogram(f"G_{data.name}", data, step=curr_step)
-    #
-    #         # Perform train step
-    #         metrics = self.train_step()
-    #         for key, value in metrics.items():
-    #             tf.summary.scalar(key, value, step=curr_step)
-    #
-    #         pbar.set_description(f"[Checkpoint in {self.config.checkpoint_freq - (curr_step % self.config.checkpoint_freq)} steps] " +
-    #                              " ".join([f"[{key}: {value:.3f}]" for key, value in metrics.items()]))
-    #
-    #         # Reset state
-    #         if resume:
-    #             resume = False
+    def save_model(self):
+        self._save_model(self.model.G_net, "G")
+        self._save_model(self.model.D_net, "D")
+
+    def convert_model(self, config: ConverterConfig):
+        self._convert_model(self.model.G_net, "G", self.repr_dataset,
+                            dyn_range_q=config.dyn_range_q, f16_q=config.f16_q,
+                            int_float_q=config.int_float_q, int_q=config.int_q)
+        self._convert_model(self.model.D_net, "D", self.repr_dataset,
+                            dyn_range_q=config.dyn_range_q, f16_q=config.f16_q,
+                            int_float_q=config.int_float_q, int_q=config.int_q)
 
     ################################################################
     # Sampling
-    # def generate_samples(self, real_As: tf.Tensor, real_Bs: tf.Tensor) -> tf.Tensor:
-    #     fake_Bs = self.G_net(real_As)
-    #
-    #     rows = []
-    #     for i in range(real_As.shape[0]):
-    #         real_A = tf.keras.layers.experimental.preprocessing.Resizing(height=256, width=256, interpolation="nearest")(real_As[i])
-    #         real_B = tf.keras.layers.experimental.preprocessing.Resizing(height=256, width=256, interpolation="nearest")(real_Bs[i])
-    #         fake_B = tf.keras.layers.experimental.preprocessing.Resizing(height=256, width=256, interpolation="nearest")(fake_Bs[i])
-    #
-    #         if real_A.shape[2] == 1:
-    #             real_A = tf.concat([real_A, real_A, real_A], axis=2)
-    #         if real_B.shape[2] == 1:
-    #             real_B = tf.concat([real_B, real_B, real_B], axis=2)
-    #         if fake_B.shape[2] == 1:
-    #             fake_B = tf.concat([fake_B, fake_B, fake_B], axis=2)
-    #
-    #         row = tf.concat([real_A, real_B, fake_B], axis=1)
-    #         rows.append(row)
-    #
-    #     return tf.concat(rows, axis=0)
-    #
-    # def sample(self, step: int):
-    #     real_As = []
-    #     real_Bs = []
-    #
-    #     for real_A, real_B in itertools.chain(
-    #             self.dataloader.next(batch_size=SAMPLE_N, shuffle=False),
-    #             self.dataloader.next(batch_size=SAMPLE_N, shuffle=False, test=True)):
-    #         real_As.append(real_A)
-    #         real_Bs.append(real_B)
-    #
-    #     real_As = tf.concat(real_As, axis=0)
-    #     real_Bs = tf.concat(real_Bs, axis=0)
-    #
-    #     assert isinstance(real_As, tf.Tensor)
-    #     assert isinstance(real_Bs, tf.Tensor)
-    #
-    #     ################################################################
-    #     rgb_img = self.generate_samples(real_As, real_Bs)
-    #     img_path = self.samples_path.joinpath(f"{str(step).zfill(10)}.png")
-    #     tf.keras.preprocessing.image.save_img(img_path, rgb_img)
+    def generate_samples(self, real_As: tf.Tensor, real_Bs: tf.Tensor) -> tf.Tensor:
+        fake_Bs = self.model.G_net(real_As)
+
+        rows = []
+        for i in range(real_As.shape[0]):
+            real_A = tf.keras.layers.experimental.preprocessing.Resizing(height=256, width=256, interpolation="nearest")(real_As[i])
+            real_B = tf.keras.layers.experimental.preprocessing.Resizing(height=256, width=256, interpolation="nearest")(real_Bs[i])
+            fake_B = tf.keras.layers.experimental.preprocessing.Resizing(height=256, width=256, interpolation="nearest")(fake_Bs[i])
+
+            if real_A.shape[2] == 1:
+                real_A = tf.concat([real_A, real_A, real_A], axis=2)
+            if real_B.shape[2] == 1:
+                real_B = tf.concat([real_B, real_B, real_B], axis=2)
+            if fake_B.shape[2] == 1:
+                fake_B = tf.concat([fake_B, fake_B, fake_B], axis=2)
+
+            row = tf.concat([real_A, real_B, fake_B], axis=1)
+            rows.append(row)
+
+        return tf.concat(rows, axis=0)
+
+    def sample(self):
+        train_data = self.dataset["train"].take(SAMPLE_N)
+        test_data = self.dataset["test"].take(SAMPLE_N)
+        real_As = []
+        real_Bs = []
+
+        # Train
+        for i, (real_A, real_B) in enumerate(train_data):
+            real_A = tf.expand_dims(real_A, axis=0)
+            real_B = tf.expand_dims(real_B, axis=0)
+
+            seed = int(tf.random.uniform((), maxval=tf.dtypes.int64.max, dtype=tf.dtypes.int64))
+            real_A = self.model.augment(real_A, seed)
+            real_B = self.model.augment(real_B, seed)
+
+            real_As.append(self.model.resize(real_A))
+            real_Bs.append(self.model.resize(real_B))
+
+        # Test
+        for i, (real_A, real_B) in enumerate(test_data):
+            real_A = tf.expand_dims(real_A, axis=0)
+            real_B = tf.expand_dims(real_B, axis=0)
+
+            real_As.append(self.model.resize(real_A))
+            real_Bs.append(self.model.resize(real_B))
+
+        real_As = tf.concat(real_As, axis=0)
+        real_Bs = tf.concat(real_Bs, axis=0)
+
+        ################################################################
+        rgb_img = self.generate_samples(real_As, real_Bs)
+        self.samples_path.mkdir(exist_ok=True, parents=True)
+        img_path = self.samples_path.joinpath(f"{int(self.model._train_counter):010}.png")
+        tf.keras.preprocessing.image.save_img(img_path, rgb_img)

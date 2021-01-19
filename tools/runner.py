@@ -1,13 +1,9 @@
-import itertools
-
-from tqdm import tqdm
-import numpy as np
+import tensorflow.keras.layers.experimental.preprocessing as preprocessing
 
 from metaneural.runner import *
 from nn.generator import *
-import tensorflow.keras.layers.experimental.preprocessing as preprocessing
 from nn.discriminator import Discriminator
-from tools.config import Config
+from tools.config import CustomConfig
 
 
 SAMPLE_N = 5
@@ -114,12 +110,12 @@ class Trainer(tf.keras.models.Model):
         }
 
 
-class CustomRunner(Runner):
-    config: Config
+class CustomRunner(DefaultRunner):
+    config: CustomConfig
 
     ################################################################
-    @Runner.with_strategy
-    def init(self) -> Tuple[Trainer, Dict[str, tf.keras.optimizers.Optimizer]]:
+    @DefaultRunner.with_strategy
+    def init_model(self) -> Tuple[Trainer, Dict[str, tf.keras.optimizers.Optimizer]]:
         G_net: tf.keras.models.Model = GENERATORS[self.config.generator](config=self.config)
         G_optimizer = tf.keras.optimizers.Adam(learning_rate=self.config.g_lr,
                                                beta_1=self.config.g_beta1)
@@ -138,23 +134,6 @@ class CustomRunner(Runner):
         model = Trainer(G_net, D_net)
         return model, {"G": G_optimizer, "D": D_optimizer}
 
-    def _loader_generator(self, img_names):
-        A = Path(self.config.dataset_a)
-        B = Path(self.config.dataset_b)
-
-        for img_name in sorted([p.name for p in A.glob("*.png")]):
-            assert A.joinpath(img_name).exists(), f"{A.joinpath(img_name)} does not exist"
-            assert B.joinpath(img_name).exists(), f"{B.joinpath(img_name)} does not exist"
-
-        for img_name in img_names:
-            img_A = tf.keras.preprocessing.image.load_img(A.joinpath(img_name), grayscale=self.config.in_channels == 1)
-            # img_A = tf.expand_dims(tf.keras.preprocessing.image.img_to_array(img_A), axis=0)
-
-            img_B = tf.keras.preprocessing.image.load_img(B.joinpath(img_name), grayscale=self.config.out_channels == 1)
-            # img_B = tf.expand_dims(tf.keras.preprocessing.image.img_to_array(img_B), axis=0)
-
-            yield img_A, img_B
-
     def init_dataset(self) -> Dict[str, tf.data.Dataset]:
         # Load names
         img_names = sorted([p.name for p in Path(self.config.dataset_a).glob("*.png")])
@@ -172,6 +151,23 @@ class CustomRunner(Runner):
 
         return {"train": train_dataset, "test": test_dataset}
 
+    def _loader_generator(self, img_names):
+        A = Path(self.config.dataset_a)
+        B = Path(self.config.dataset_b)
+
+        for img_name in sorted([p.name for p in A.glob("*.png")]):
+            assert A.joinpath(img_name).exists(), f"{A.joinpath(img_name)} does not exist"
+            assert B.joinpath(img_name).exists(), f"{B.joinpath(img_name)} does not exist"
+
+        for img_name in img_names:
+            img_A = tf.keras.preprocessing.image.load_img(A.joinpath(img_name), grayscale=self.config.in_channels == 1)
+            # img_A = tf.expand_dims(tf.keras.preprocessing.image.img_to_array(img_A), axis=0)
+
+            img_B = tf.keras.preprocessing.image.load_img(B.joinpath(img_name), grayscale=self.config.out_channels == 1)
+            # img_B = tf.expand_dims(tf.keras.preprocessing.image.img_to_array(img_B), axis=0)
+
+            yield img_A, img_B
+
     def quantize_model(self):
         if bool(self.config.q_aware_train[0]):
             import tensorflow_model_optimization as tfmot
@@ -183,26 +179,21 @@ class CustomRunner(Runner):
 
     ################################################################
     def train(self, resume: bool = False):
-        tensorboard_cb = tf.keras.callbacks.TensorBoard(
-            log_dir=self.run_path,
-            histogram_freq=self.config.test_freq,
-            update_freq="batch")
-        checkpoint_cb = tf.keras.callbacks.LambdaCallback(
-            on_train_begin=lambda metrics: self.snap(0),
-            on_epoch_end=lambda epoch, logs: self.snap(epoch + 1) if (epoch + 1) % self.config.checkpoint_freq == 0 else None)
-        config_cb = tf.keras.callbacks.LambdaCallback(
-            on_train_begin=lambda metrics: self.save_config(0),
-            on_epoch_end=lambda epoch, logs: self.save_config(epoch + 1) if (epoch + 1) % self.config.checkpoint_freq == 0 else None)
+        cbs = self.get_callbacks()
+
         sample_cb = tf.keras.callbacks.LambdaCallback(
-            on_train_begin=lambda metrics: self.sample(),
-            on_batch_end=lambda batch, logs: self.sample() if (batch + 1) % self.config.sample_freq == 0 else None)
+            on_train_begin=lambda logs: self.sample(),
+            on_batch_end=lambda batch, logs: self.sample() if self.config.step % self.config.sample_freq == 0 else None,
+            on_train_end=lambda logs: self.sample())
+
+        cbs.append(sample_cb)
 
         self.model.compile(G_optimizer=self.optimizer["G"], D_optimizer=self.optimizer["D"],
                            g_l1_lambda=self.config.g_l1_lambda)
         self.model.fit(self.dataset["train"],
                        validation_data=self.dataset["test"], validation_freq=self.config.test_freq,
                        initial_epoch=self.config.epoch, epochs=self.config.epochs,
-                       batch_size=self.config.batch_size, callbacks=[tensorboard_cb, checkpoint_cb, config_cb, sample_cb])
+                       batch_size=self.config.batch_size, callbacks=cbs)
 
     ################################################################
     # Saving, snapping, etc
@@ -277,5 +268,5 @@ class CustomRunner(Runner):
         ################################################################
         rgb_img = self.generate_samples(real_As, real_Bs)
         self.samples_path.mkdir(exist_ok=True, parents=True)
-        img_path = self.samples_path.joinpath(f"{int(self.model._train_counter):010}.png")
+        img_path = self.samples_path.joinpath(f"{self.config.step:010}.png")
         tf.keras.preprocessing.image.save_img(img_path, rgb_img)

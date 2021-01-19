@@ -3,8 +3,6 @@ from typing import List, Callable, Optional
 import tensorflow as tf
 import tensorflow_addons as tfa
 
-from metaneural.nn import *
-
 
 class UNet(tf.keras.models.Model):
     def __init__(self, resolution: int, input_channels: int, output_channels: int, filters: int, n_blocks: int,
